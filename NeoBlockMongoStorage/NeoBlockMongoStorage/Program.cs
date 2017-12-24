@@ -10,6 +10,9 @@ using System.Timers;
 using System.Threading;
 using Microsoft.Extensions.Configuration;
 using System.Collections.Generic;
+using System.Net;
+using System.Text;
+using System.IO;
 
 namespace NeoBlockMongoStorage
 {
@@ -43,9 +46,16 @@ namespace NeoBlockMongoStorage
             Console.WriteLine("Block MaxIndex in DB:" + GetBlockMaxIndex());
 
             while (true) {
+                //处理块数据
                 StorageBlockData();
+                //处理交易数据
                 StorageTxData();
+                //统计处理UTXO数据
                 StorageUTXOData();
+                //处理notify数据
+                StorageNotifyData();
+                //处理fulllog数据
+                StorageFulllogData();
 
                 Thread.Sleep(sleepTime);
             }
@@ -118,7 +128,7 @@ namespace NeoBlockMongoStorage
                     //只处理没有存储过的
                     if (!IsTxStoraged("0x" + storageTxid))
                     {
-                        //获取Cli block数据
+                        //获取Cli TX数据
                         string resTx = GetNeoCliData("getrawtransaction", new object[]
                             {
                         storageTxid,
@@ -145,9 +155,175 @@ namespace NeoBlockMongoStorage
             } 
         }
 
+        private static void StorageNotifyData()
+        {
+            var maxBlockindex = GetSystemCounter("notify");
+            //检查当前已有区块是否已处理所有交易notify
+            DoStorageNotify(maxBlockindex);
+
+            var storageBlockindex = maxBlockindex + 1;
+            DoStorageNotify(storageBlockindex);
+        }
+
+        private static void DoStorageNotify(int doBlockIndex)
+        {
+            DateTime start = DateTime.Now;
+
+            JObject postData = new JObject();
+            postData.Add("jsonrpc", "2.0");
+            postData.Add("method", "getnotifyinfo");
+            postData.Add("params", new JArray() { doBlockIndex });
+            postData.Add("id", 1);
+            string postDataStr = JsonConvert.SerializeObject(postData);
+            //获取Cli Notify数据
+            string resNotify = Post(NeoCliJsonRPCUrl, postDataStr);
+            resNotify = JsonConvert.SerializeObject(JObject.Parse(resNotify)["result"]);
+                //GetNeoCliData("getnotifyinfo", new object[]
+                //{
+                //    doBlockIndex
+                //});
+            //获取有效数据则存储Mongodb
+            if (resNotify != "null")
+            {
+                JArray txJA = JArray.Parse(resNotify);
+                long blocktime = (long)txJA[0]["time"];
+                List<JObject> listJ = new List<JObject>();
+                foreach (JToken jk in txJA)
+                {
+                    var isListBexist = false;//判断是否已存在txid
+                    //如果已有txid则添加
+                    if (listJ.Count > 0)
+                    {
+                        foreach (JObject j in listJ)
+                        {
+                            var a = JsonConvert.SerializeObject(j);
+
+                            if ((string)j["txid"] == (string)jk["txid"])
+                            {
+                                JObject statesJ = new JObject
+                                {
+                                    { "contract",(string)jk["contract"]},
+                                    { "type",(string)jk["state"]["type"]},
+                                    { "values",(JArray)jk["state"]["value"] }
+                                };
+                                JArray statesJA = (JArray)j["states"];
+                                statesJA.Add(statesJ);
+
+                                a = JsonConvert.SerializeObject(j);
+
+                                isListBexist = true;
+                                break;
+                            }
+                        }
+                    }
+                    //如果没有txid则创建
+                    if(listJ.Count == 0 || isListBexist == false)
+                    {
+                        JObject j = new JObject
+                        {
+                            { "txid", (string)jk["txid"] },
+                            { "blocktime",blocktime},
+                            { "states",new JArray{new JObject{
+                                { "contract",(string)jk["contract"]},
+                                { "type",(string)jk["state"]["type"]},
+                                { "values",(JArray)jk["state"]["value"] }
+                            }
+                            } }
+                        };
+
+                        listJ.Add(j);
+                    }
+                }
+
+                //每个txid逐一处理，存入数据库
+                foreach (JObject notifyJ in listJ) {
+                    if (!IsDataExist("notify", "txid", (string)notifyJ["txid"])){//判断是否重复
+                        MongoInsert("notify", JsonConvert.SerializeObject(notifyJ));
+                    }                  
+                }
+            }
+
+            //更新最新处理区块索引
+            SetSystemCounter("notify", doBlockIndex);
+
+            DateTime end = DateTime.Now;
+            var doTime = (end - start).TotalMilliseconds;
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("StorageNotifyData On Block " + doBlockIndex + " in " + doTime + "ms");
+            Console.ForegroundColor = ConsoleColor.White;
+        }
+
+        private static void StorageFulllogData()
+        {
+            var maxBlockindex = GetSystemCounter("fulllog");
+            //检查当前已有区块是否已处理所有交易fulllog
+            DoStorageFulllog(maxBlockindex);
+
+            var storageBlockindex = maxBlockindex + 1;
+            DoStorageFulllog(storageBlockindex);
+        }
+
+        private static void DoStorageFulllog(int doBlockIndex)
+        {
+            DateTime start = DateTime.Now;
+
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+            var collection = database.GetCollection<BsonDocument>("block");
+
+            var findBson = BsonDocument.Parse("{index:" + doBlockIndex + "}");
+            var query = collection.Find(findBson).ToList();
+            if (query.Count > 0)
+            {
+                BsonDocument queryB = query[0].AsBsonDocument;
+
+                foreach (BsonValue bv in queryB["tx"].AsBsonArray)
+                {
+                    //获取数据库Tx数据
+                    string doTxid = (string)bv["txid"];
+
+                    JObject postData = new JObject();
+                    postData.Add("jsonrpc", "2.0");
+                    postData.Add("method", "getfullloginfo");
+                    postData.Add("params", new JArray() { doTxid });
+                    postData.Add("id", 1);
+                    string postDataStr = JsonConvert.SerializeObject(postData);
+                    //获取Cli Notify数据
+                    string resFulllog = Post(NeoCliJsonRPCUrl, postDataStr);
+                    if (JObject.Parse(resFulllog)["result"] != null)
+                    {
+                        resFulllog = JObject.Parse(resFulllog)["result"].ToString();
+                    }
+                    else { resFulllog = null; }
+                    if (resFulllog != null)
+                    {
+                        if (!IsDataExist("fulllog", "txid", doTxid))
+                        {
+                            string fulllog7z = resFulllog;
+                            JObject j = new JObject
+                            {
+                                { "txid", doTxid },
+                                { "fulllog7z", fulllog7z }
+                            };
+                            MongoInsert("fulllog", JsonConvert.SerializeObject(j));
+                        }
+                    }
+                }
+            }
+
+            //更新最新处理区块索引
+            SetSystemCounter("fulllog", doBlockIndex);
+
+            DateTime end = DateTime.Now;
+            var doTime = (end - start).TotalMilliseconds;
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            Console.WriteLine("StorageFulllogData On Block " + doBlockIndex + " in " + doTime + "ms");
+            Console.ForegroundColor = ConsoleColor.White;
+        }
+
         private static void StorageUTXOData()
         {
-            var maxBlockindex = GetUTXOblockindex();
+            var maxBlockindex = GetSystemCounter("utxo");
             //检查当前已有区块是否已处理所有交易utxo
             DoStorageUTXO(maxBlockindex);
 
@@ -365,13 +541,13 @@ namespace NeoBlockMongoStorage
             }
         }
 
-        private static int GetUTXOblockindex()
+        private static int GetSystemCounter(string counter)
         {
             var client = new MongoClient(mongodbConnStr);
             var database = client.GetDatabase(mongodbDatabase);
             var collection = database.GetCollection<BsonDocument>("system_counter");
 
-            var queryBson = BsonDocument.Parse("{counter:'utxo'}");
+            var queryBson = BsonDocument.Parse("{counter:'"+ counter +"'}");
             var query = collection.Find(queryBson).ToList();
             if (query.Count == 0){ return -1; }
             else
@@ -424,6 +600,39 @@ namespace NeoBlockMongoStorage
 
             if (query.Count == 0) { return false; }
             else { return true; }
+        }
+
+        /// <summary>  
+        /// 指定Post地址使用Get 方式获取全部字符串  
+        /// </summary>  
+        /// <param name="url">请求后台地址</param>  
+        /// <param name="content">Post提交数据内容(utf-8编码的)</param>  
+        /// <returns></returns>  
+        public static string Post(string url, string content)
+        {
+            string result = "";
+            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+            req.Method = "POST";
+            req.ContentType = "application/x-www-form-urlencoded";
+
+            #region 添加Post 参数  
+            byte[] data = Encoding.UTF8.GetBytes(content);
+            req.ContentLength = data.Length;
+            using (Stream reqStream = req.GetRequestStream())
+            {
+                reqStream.Write(data, 0, data.Length);
+                reqStream.Close();
+            }
+            #endregion
+
+            HttpWebResponse resp = (HttpWebResponse)req.GetResponse();
+            Stream stream = resp.GetResponseStream();
+            //获取响应内容  
+            using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+            {
+                result = reader.ReadToEnd();
+            }
+            return result;
         }
     }
 }
