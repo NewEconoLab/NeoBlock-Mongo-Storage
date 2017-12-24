@@ -45,6 +45,31 @@ namespace NeoBlockMongoStorage
 
             Console.WriteLine("Block MaxIndex in DB:" + GetBlockMaxIndex());
 
+            //创建任务
+            Task task_StorageNotify = new Task(() => {
+                Console.WriteLine("异步循环执行StorageNotifyData开始");
+                while (true)
+                {
+                    //处理notify数据
+                    StorageNotifyData();
+
+                    Thread.Sleep(sleepTime);
+                }
+            });
+            Task task_StorageFulllog = new Task(() => {
+                Console.WriteLine("异步循环执行StorageFulllogData开始");
+                while (true) {
+                    //处理fulllog数据
+                    StorageFulllogData();
+
+                    Thread.Sleep(sleepTime);
+                }
+            });
+            //启动任务
+            task_StorageNotify.Start();
+            task_StorageFulllog.Start();
+
+            //主进程(同步)
             while (true) {
                 //处理块数据
                 StorageBlockData();
@@ -52,13 +77,11 @@ namespace NeoBlockMongoStorage
                 StorageTxData();
                 //统计处理UTXO数据
                 StorageUTXOData();
-                //处理notify数据
-                StorageNotifyData();
-                //处理fulllog数据
-                StorageFulllogData();
 
                 Thread.Sleep(sleepTime);
             }
+
+
 
             //Timer t = new Timer(100);
             //t.Enabled = true;
