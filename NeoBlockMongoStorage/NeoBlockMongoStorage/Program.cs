@@ -221,20 +221,29 @@ namespace NeoBlockMongoStorage
                     {
                         foreach (JObject j in listJ)
                         {
-                            var a = JsonConvert.SerializeObject(j);
-
                             if ((string)j["txid"] == (string)jk["txid"])
                             {
-                                JObject statesJ = new JObject
+                                JObject statesJ = new JObject();
+                                if ((string)jk["state"]["type"] == "Array")
                                 {
-                                    { "contract",(string)jk["contract"]},
-                                    { "type",(string)jk["state"]["type"]},
-                                    { "values",(JArray)jk["state"]["value"] }
-                                };
+                                    statesJ = new JObject
+                                    {
+                                        { "contract",(string)jk["contract"]},
+                                        { "type",(string)jk["state"]["type"]},
+                                        { "values",(JArray)jk["state"]["value"] }
+                                    };
+                                }
+                                else {
+                                    statesJ = new JObject
+                                    {
+                                        { "contract",(string)jk["contract"]},
+                                        { "type",(string)jk["state"]["type"]},
+                                        { "values",(string)jk["state"]["value"] }
+                                    };
+                                }
+
                                 JArray statesJA = (JArray)j["states"];
                                 statesJA.Add(statesJ);
-
-                                a = JsonConvert.SerializeObject(j);
 
                                 isListBexist = true;
                                 break;
@@ -244,17 +253,35 @@ namespace NeoBlockMongoStorage
                     //如果没有txid则创建
                     if(listJ.Count == 0 || isListBexist == false)
                     {
-                        JObject j = new JObject
+                        JObject j = new JObject();
+                        if ((string)jk["state"]["type"] == "Array")
                         {
-                            { "txid", (string)jk["txid"] },
-                            { "blocktime",blocktime},
-                            { "states",new JArray{new JObject{
-                                { "contract",(string)jk["contract"]},
-                                { "type",(string)jk["state"]["type"]},
-                                { "values",(JArray)jk["state"]["value"] }
-                            }
-                            } }
-                        };
+                            j = new JObject
+                            {
+                                { "txid", (string)jk["txid"] },
+                                { "blocktime",blocktime},
+                                { "states",new JArray{new JObject{
+                                    { "contract",(string)jk["contract"]},
+                                    { "type",(string)jk["state"]["type"]},
+                                    { "values",(JArray)jk["state"]["value"] }
+                                }
+                                } }
+                            };
+                        }
+                        else {
+                            j = new JObject
+                            {
+                                { "txid", (string)jk["txid"] },
+                                { "blocktime",blocktime},
+                                { "states",new JArray{new JObject{
+                                    { "contract",(string)jk["contract"]},
+                                    { "type",(string)jk["state"]["type"]},
+                                    { "values",(string)jk["state"]["value"] }
+                                }
+                                } }
+                            };
+                        }
+
 
                         listJ.Add(j);
                     }
