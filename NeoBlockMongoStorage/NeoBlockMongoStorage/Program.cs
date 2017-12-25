@@ -72,10 +72,9 @@ namespace NeoBlockMongoStorage
             //主进程(同步)
             while (true) {
                 //处理块数据
-                StorageBlockTXData();
-                ////处理交易数据
-                //StorageTxData(); 交易数据在处理块数据时同时处理
-
+                StorageBlockData();
+                //处理交易数据
+                StorageTxData();
                 //统计处理UTXO数据
                 StorageUTXOData();
 
@@ -96,140 +95,90 @@ namespace NeoBlockMongoStorage
         //    StorageBaseData();
         //}
 
-        private static void StorageBlockTXData()
-        {
-            int maxIndex = GetBlockMaxIndex();
-            //检查当前已有区块是否已存所有交易
-            if (!IsDataExist("tx", "blockindex", maxIndex))
-            {
-                //已存区块没有存tx则再处理一遍
-                DoStorageBlockTXData(maxIndex);
-            }
-
-            int storageIndex = maxIndex + 1;
-            DoStorageBlockTXData(storageIndex);
-        }
-
-        private static void DoStorageBlockTXData(int doIndex)
+        private static void StorageBlockData()
         {
             DateTime start = DateTime.Now;
 
-            //获取Cli block数据
-            string resBlock = GetNeoCliData("getblock", new object[]
-                {
-                    doIndex,
-                    1
-                });
+            var maxIndex = GetBlockMaxIndex();
+            var storageIndex = maxIndex + 1;
 
-            //获取有效数据则存储Mongodb
-            if (resBlock != "null")
-            {
-                //只处理没有存储过的
-                if (!IsDataExist("block", "index", doIndex))
-                {
-                    JObject blockJ = JObject.Parse(resBlock);
-                    //去除非块原生数据
-                    blockJ.Remove("confirmations");
-                    blockJ.Remove("nextblockhash");              
+            //只处理没有存储过的
+            if (!IsBlockStoraged(storageIndex)) {
+                //获取Cli block数据
+                string resBlock = GetNeoCliData("getblock", new object[]
+                    {
+                        storageIndex,
+                        1
+                    });
+                //获取有效数据则存储Mongodb
+                if (resBlock != "null") {
+                    MongoInsert("block", resBlock);
 
-                    //存储区块数据
-                    MongoInsertOne("block", blockJ);
+                    DateTime end = DateTime.Now;
+                    var doTime = (end - start).TotalMilliseconds;
+                    Console.WriteLine("StorageBlockData On Block " + maxIndex + " in " + doTime + "ms");
                 }
-
-                //依据区块数据存储交易数据
-                DoStorageTxDataByBlock(resBlock);
-
-                DateTime end = DateTime.Now;
-                var doTime = (end - start).TotalMilliseconds;
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("StorageBlockTxData On Block " + doIndex + " in " + doTime + "ms");
-                Console.ForegroundColor = ConsoleColor.White;
             }
         }
 
-        private static void DoStorageTxDataByBlock(string block)
+        private static void StorageTxData()
+        {          
+            var maxBlockindex = GetTxMaxBlockindex();
+            //检查当前已有区块是否已存所有交易
+            DoStorageTxData(maxBlockindex);
+
+            var storageBlockindex = maxBlockindex + 1;
+            DoStorageTxData(storageBlockindex);
+        }
+
+        private static void DoStorageTxData(int doBlockIndex)
         {
-            JObject blockJ = JObject.Parse(block);
-            int blockIndex = (int)blockJ["index"];
-            JArray blockTx = (JArray)blockJ["tx"];
+            DateTime start = DateTime.Now;
 
             var client = new MongoClient(mongodbConnStr);
             var database = client.GetDatabase(mongodbDatabase);
-            var collection = database.GetCollection<BsonDocument>("tx");
+            var collection = database.GetCollection<BsonDocument>("block");
 
-            List<BsonDocument> listBson = new List<BsonDocument>();
-            foreach (JObject j in blockTx)
-            {
-                j.Add("blockindex", blockIndex);
-                listBson.Add(BsonDocument.Parse(JsonConvert.SerializeObject(j)));
-            }
-            if (listBson.Count > 0 && !IsDataExist("tx","txid",listBson[0]["txid"].AsString))
-            {
-                //批量写入块所有交易数据
-                collection.InsertMany(listBson);
+            var findBson = BsonDocument.Parse("{index:" + doBlockIndex + "}");
+            var query = collection.Find(findBson).ToList();
+            if (query.Count > 0) {
+                BsonDocument queryB = query[0].AsBsonDocument;
+
+                foreach (BsonValue bv in queryB["tx"].AsBsonArray)
+                {
+                    string storageTxid = (string)bv["txid"];
+                    storageTxid = storageTxid.Substring(2, storageTxid.Length - 2);
+                    //只处理没有存储过的
+                    if (!IsTxStoraged("0x" + storageTxid))
+                    {
+                        //获取Cli TX数据
+                        string resTx = GetNeoCliData("getrawtransaction", new object[]
+                            {
+                        storageTxid,
+                        1
+                            });
+                        //获取有效数据则存储Mongodb
+                        if (resTx != "null")
+                        {
+                            JObject txJ = JObject.Parse(resTx);
+                            txJ.Remove("confirmations");
+                            txJ.Add("blockindex", doBlockIndex);
+
+                            var txJstr = JsonConvert.SerializeObject(txJ);
+                            MongoInsert("tx", txJstr);
+
+                            DateTime end = DateTime.Now;
+                            var doTime = (end - start).TotalMilliseconds;
+                            Console.ForegroundColor = ConsoleColor.Green;
+                            Console.WriteLine("StorageTxData On Block " + doBlockIndex + " in " + doTime + "ms");
+                            Console.ForegroundColor = ConsoleColor.White;
+                        }
+                    }
+                }
             }
 
             client = null;
         }
-
-        //private static void StorageTxData()
-        //{          
-        //    var maxBlockindex = GetTxMaxBlockindex();
-        //    //检查当前已有区块是否已存所有交易
-        //    DoStorageTxData(maxBlockindex);
-
-        //    var storageBlockindex = maxBlockindex + 1;
-        //    DoStorageTxData(storageBlockindex);
-        //}
-
-        //private static void DoStorageTxData(int doBlockIndex)
-        //{
-        //    DateTime start = DateTime.Now;
-
-        //    var client = new MongoClient(mongodbConnStr);
-        //    var database = client.GetDatabase(mongodbDatabase);
-        //    var collection = database.GetCollection<BsonDocument>("block");
-
-        //    var findBson = BsonDocument.Parse("{index:" + doBlockIndex + "}");
-        //    var query = collection.Find(findBson).ToList();
-        //    if (query.Count > 0) {
-        //        BsonDocument queryB = query[0].AsBsonDocument;
-
-        //        foreach (BsonValue bv in queryB["tx"].AsBsonArray)
-        //        {
-        //            string storageTxid = (string)bv["txid"];
-        //            storageTxid = storageTxid.Substring(2, storageTxid.Length - 2);
-        //            //只处理没有存储过的
-        //            if (!IsTxStoraged("0x" + storageTxid))
-        //            {
-        //                //获取Cli TX数据
-        //                string resTx = GetNeoCliData("getrawtransaction", new object[]
-        //                    {
-        //                storageTxid,
-        //                1
-        //                    });
-        //                //获取有效数据则存储Mongodb
-        //                if (resTx != "null")
-        //                {
-        //                    JObject txJ = JObject.Parse(resTx);
-        //                    txJ.Remove("confirmations");
-        //                    txJ.Add("blockindex", doBlockIndex);
-
-        //                    var txJstr = JsonConvert.SerializeObject(txJ);
-        //                    MongoInsert("tx", txJstr);
-
-        //                    DateTime end = DateTime.Now;
-        //                    var doTime = (end - start).TotalMilliseconds;
-        //                    Console.ForegroundColor = ConsoleColor.Green;
-        //                    Console.WriteLine("StorageTxData On Block " + doBlockIndex + " in " + doTime + "ms");
-        //                    Console.ForegroundColor = ConsoleColor.White;
-        //                }
-        //            }
-        //        }
-        //    }
-
-        //    client = null;
-        //}
 
         private static void StorageNotifyData()
         {
@@ -341,19 +290,19 @@ namespace NeoBlockMongoStorage
                 //每个txid逐一处理，存入数据库
                 foreach (JObject notifyJ in listJ) {
                     if (!IsDataExist("notify", "txid", (string)notifyJ["txid"])){//判断是否重复
-                        MongoInsertOne("notify", notifyJ);
+                        MongoInsert("notify", JsonConvert.SerializeObject(notifyJ));
                     }                  
                 }
-
-                //更新最新处理区块索引
-                SetSystemCounter("notify", doBlockIndex);
-
-                DateTime end = DateTime.Now;
-                var doTime = (end - start).TotalMilliseconds;
-                Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine("StorageNotifyData On Block " + doBlockIndex + " in " + doTime + "ms");
-                Console.ForegroundColor = ConsoleColor.White;
             }
+
+            //更新最新处理区块索引
+            SetSystemCounter("notify", doBlockIndex);
+
+            DateTime end = DateTime.Now;
+            var doTime = (end - start).TotalMilliseconds;
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine("StorageNotifyData On Block " + doBlockIndex + " in " + doTime + "ms");
+            Console.ForegroundColor = ConsoleColor.White;
         }
 
         private static void StorageFulllogData()
@@ -408,20 +357,20 @@ namespace NeoBlockMongoStorage
                                 { "txid", doTxid },
                                 { "fulllog7z", fulllog7z }
                             };
-                            MongoInsertOne("fulllog", j);
+                            MongoInsert("fulllog", JsonConvert.SerializeObject(j));
                         }
                     }
                 }
-
-                //更新最新处理区块索引
-                SetSystemCounter("fulllog", doBlockIndex);
-
-                DateTime end = DateTime.Now;
-                var doTime = (end - start).TotalMilliseconds;
-                Console.ForegroundColor = ConsoleColor.Magenta;
-                Console.WriteLine("StorageFulllogData On Block " + doBlockIndex + " in " + doTime + "ms");
-                Console.ForegroundColor = ConsoleColor.White;
             }
+
+            //更新最新处理区块索引
+            SetSystemCounter("fulllog", doBlockIndex);
+
+            DateTime end = DateTime.Now;
+            var doTime = (end - start).TotalMilliseconds;
+            Console.ForegroundColor = ConsoleColor.Magenta;
+            Console.WriteLine("StorageFulllogData On Block " + doBlockIndex + " in " + doTime + "ms");
+            Console.ForegroundColor = ConsoleColor.White;
 
             client = null;
         }
@@ -446,7 +395,7 @@ namespace NeoBlockMongoStorage
 
             var findBson = BsonDocument.Parse("{index:" + doBlockIndex + "}");
             var query = collection.Find(findBson).ToList();
-            if (query.Count > 0)
+            if (query.Count > 0 && doBlockIndex <= GetTxMaxBlockindex())
             {
                 BsonDocument queryB = query[0].AsBsonDocument;
 
@@ -564,17 +513,17 @@ namespace NeoBlockMongoStorage
                     }
                 }
 
-                //更新utxo已处理块高度
-                SetSystemCounter("utxo", doBlockIndex);
-
-                DateTime end = DateTime.Now;
-                var doTime = (end - start).TotalMilliseconds;
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine("StorageUTXOData On Block " + doBlockIndex + " in " + doTime + "ms");
-                Console.ForegroundColor = ConsoleColor.White;
-
                 client = null;
             }
+
+            //更新utxo已处理块高度
+            SetSystemCounter("utxo", doBlockIndex);
+
+            DateTime end = DateTime.Now;
+            var doTime = (end - start).TotalMilliseconds;
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("StorageUTXOData On Block " + doBlockIndex + " in " + doTime + "ms");
+            Console.ForegroundColor = ConsoleColor.White;
         }
 
         private static string GetNeoCliData(string method, object[] paras)
@@ -589,15 +538,15 @@ namespace NeoBlockMongoStorage
             return resStr;
         }
 
-        private static void MongoInsertOne(string collName,JObject J)
+        private static void MongoInsert(string collName,string jsonStr)
         {
             var client = new MongoClient(mongodbConnStr);
             var database = client.GetDatabase(mongodbDatabase);
             var collection = database.GetCollection<BsonDocument>(collName);
 
-            var document = BsonDocument.Parse(JsonConvert.SerializeObject(J));
+            var document = BsonDocument.Parse(jsonStr);
 
-            collection.InsertOne(document);
+            collection.InsertOneAsync(document);
 
             client = null;
         }
@@ -623,43 +572,43 @@ namespace NeoBlockMongoStorage
             return maxIndex;
         }
 
-        //private static bool IsBlockStoraged(int blockIndex) {
-        //    var client = new MongoClient(mongodbConnStr);
-        //    var database = client.GetDatabase(mongodbDatabase);
-        //    var collection = database.GetCollection<BsonDocument>("block");
+        private static bool IsBlockStoraged(int blockIndex) {
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+            var collection = database.GetCollection<BsonDocument>("block");
 
-        //    var findBson = BsonDocument.Parse("{index:" + blockIndex + "}");
-        //    var query = collection.Find(findBson).ToList();
+            var findBson = BsonDocument.Parse("{index:" + blockIndex + "}");
+            var query = collection.Find(findBson).ToList();
 
-        //    int n = query.Count;
+            int n = query.Count;
 
-        //    client = null;
+            client = null;
 
-        //    if (n == 0){ return false;}
-        //    else { return true; }
-        //}
+            if (n == 0){ return false;}
+            else { return true; }
+        }
 
-        //private static int GetTxMaxBlockindex()
-        //{
-        //    int maxIndex = -1;
-        //    var client = new MongoClient(mongodbConnStr);
-        //    var database = client.GetDatabase(mongodbDatabase);
-        //    var collection = database.GetCollection<BsonDocument>("tx");
+        private static int GetTxMaxBlockindex()
+        {
+            int maxIndex = -1;
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+            var collection = database.GetCollection<BsonDocument>("tx");
 
-        //    var sortBson = BsonDocument.Parse("{blockindex:-1}");
-        //    var query = collection.Find(new BsonDocument()).Sort(sortBson).Limit(1).ToList();
-        //    if (query.Count == 0)
-        //    {
-        //        maxIndex = -1;
-        //    }
-        //    else
-        //    {
-        //        maxIndex = (int)query[0]["blockindex"];
-        //    }
+            var sortBson = BsonDocument.Parse("{blockindex:-1}");
+            var query = collection.Find(new BsonDocument()).Sort(sortBson).Limit(1).ToList();
+            if (query.Count == 0)
+            {
+                maxIndex = -1;
+            }
+            else
+            {
+                maxIndex = (int)query[0]["blockindex"];
+            }
 
-        //    client = null;
-        //    return maxIndex;
-        //}
+            client = null;
+            return maxIndex;
+        }
 
         private static int GetSystemCounter(string counter)
         {
@@ -701,22 +650,22 @@ namespace NeoBlockMongoStorage
             client = null;
         }
 
-        //private static bool IsTxStoraged(string txid)
-        //{
-        //    var client = new MongoClient(mongodbConnStr);
-        //    var database = client.GetDatabase(mongodbDatabase);
-        //    var collection = database.GetCollection<BsonDocument>("tx");
+        private static bool IsTxStoraged(string txid)
+        {
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+            var collection = database.GetCollection<BsonDocument>("tx");
 
-        //    var findBson = BsonDocument.Parse("{txid:'" + txid+ "'}");
-        //    var query = collection.Find(findBson).ToList();
+            var findBson = BsonDocument.Parse("{txid:'" + txid+ "'}");
+            var query = collection.Find(findBson).ToList();
 
-        //    int n = query.Count;
+            int n = query.Count;
 
-        //    client = null;
+            client = null;
 
-        //    if (n == 0) { return false; }
-        //    else { return true; }
-        //}
+            if (n == 0) { return false; }
+            else { return true; }
+        }
 
         private static bool IsDataExist(string coll,string key,object value)
         {
