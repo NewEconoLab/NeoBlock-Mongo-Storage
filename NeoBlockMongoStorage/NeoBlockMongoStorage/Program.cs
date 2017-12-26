@@ -652,7 +652,8 @@ namespace NeoBlockMongoStorage
             return maxIndex;
         }
 
-        //private static bool IsBlockStoraged(int blockIndex) {
+        //private static bool IsBlockStoraged(int blockIndex)
+        //{
         //    var client = new MongoClient(mongodbConnStr);
         //    var database = client.GetDatabase(mongodbDatabase);
         //    var collection = database.GetCollection<BsonDocument>("block");
@@ -664,7 +665,7 @@ namespace NeoBlockMongoStorage
 
         //    client = null;
 
-        //    if (n == 0){ return false;}
+        //    if (n == 0) { return false; }
         //    else { return true; }
         //}
 
@@ -754,7 +755,16 @@ namespace NeoBlockMongoStorage
             var database = client.GetDatabase(mongodbDatabase);
             var collection = database.GetCollection<BsonDocument>(coll);
 
-            var findBson = BsonDocument.Parse("{" + key + ":'" + value + "'}");
+            BsonDocument findBson = new BsonDocument();
+            if (value.GetType() == typeof(string))
+            {
+                findBson = BsonDocument.Parse("{" + key + ":'" + value + "'}");
+            }
+            else
+            {
+                findBson = BsonDocument.Parse("{" + key + ":" + value + "}");
+            }
+
             var query = collection.Find(findBson).ToList();
 
             int n = query.Count;
