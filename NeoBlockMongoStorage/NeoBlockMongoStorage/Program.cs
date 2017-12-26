@@ -18,6 +18,8 @@ namespace NeoBlockMongoStorage
 {
     class Program
     {
+        static CoreHttpHelper chh = new CoreHttpHelper();
+
         static string mongodbConnStr = string.Empty;
         static string mongodbDatabase = string.Empty;
         static string NeoCliJsonRPCUrl = string.Empty;
@@ -80,6 +82,10 @@ namespace NeoBlockMongoStorage
 
                 //统计处理UTXO数据
                 StorageUTXOData();
+                ////处理notify数据
+                //StorageNotifyData();
+                ////处理fulllog数据
+                //StorageFulllogData();
 
                 Thread.Sleep(sleepTime);
             }
@@ -247,70 +253,73 @@ namespace NeoBlockMongoStorage
         {
             DateTime start = DateTime.Now;
 
-            JObject postData = new JObject();
-            postData.Add("jsonrpc", "2.0");
-            postData.Add("method", "getnotifyinfo");
-            postData.Add("params", new JArray() { doBlockIndex });
-            postData.Add("id", 1);
-            string postDataStr = JsonConvert.SerializeObject(postData);
-            //获取Cli Notify数据
-            string resNotify = Post(NeoCliJsonRPCUrl, postDataStr);
-            resNotify = JsonConvert.SerializeObject(JObject.Parse(resNotify)["result"]);
-            //GetNeoCliData("getnotifyinfo", new object[]
-            //{
-            //    doBlockIndex
-            //});
-            //获取有效数据则存储Mongodb
-            if (resNotify != "null")
+            //处理的notify的块不能大于区块高度
+            if (doBlockIndex <= GetBlockMaxIndex())
             {
-                JArray txJA = JArray.Parse(resNotify);
-                long blocktime = (long)txJA[0]["time"];
-                List<JObject> listJ = new List<JObject>();
-                foreach (JToken jk in txJA)
+                JObject postData = new JObject();
+                postData.Add("jsonrpc", "2.0");
+                postData.Add("method", "getnotifyinfo");
+                postData.Add("params", new JArray() { doBlockIndex });
+                postData.Add("id", 1);
+                string postDataStr = JsonConvert.SerializeObject(postData);
+                //获取Cli Notify数据
+                string resNotify = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8);
+                resNotify = JsonConvert.SerializeObject(JObject.Parse(resNotify)["result"]);
+                //GetNeoCliData("getnotifyinfo", new object[]
+                //{
+                //    doBlockIndex
+                //});
+                //获取有效数据则存储Mongodb
+                if (resNotify != "null")
                 {
-                    var isListBexist = false;//判断是否已存在txid
-                    //如果已有txid则添加
-                    if (listJ.Count > 0)
+                    JArray txJA = JArray.Parse(resNotify);
+                    long blocktime = (long)txJA[0]["time"];
+                    List<JObject> listJ = new List<JObject>();
+                    foreach (JToken jk in txJA)
                     {
-                        foreach (JObject j in listJ)
+                        var isListBexist = false;//判断是否已存在txid
+                                                 //如果已有txid则添加
+                        if (listJ.Count > 0)
                         {
-                            if ((string)j["txid"] == (string)jk["txid"])
+                            foreach (JObject j in listJ)
                             {
-                                JObject statesJ = new JObject();
-                                if ((string)jk["state"]["type"] == "Array")
+                                if ((string)j["txid"] == (string)jk["txid"])
                                 {
-                                    statesJ = new JObject
+                                    JObject statesJ = new JObject();
+                                    if ((string)jk["state"]["type"] == "Array")
+                                    {
+                                        statesJ = new JObject
                                     {
                                         { "contract",(string)jk["contract"]},
                                         { "type",(string)jk["state"]["type"]},
                                         { "values",(JArray)jk["state"]["value"] }
                                     };
-                                }
-                                else
-                                {
-                                    statesJ = new JObject
+                                    }
+                                    else
+                                    {
+                                        statesJ = new JObject
                                     {
                                         { "contract",(string)jk["contract"]},
                                         { "type",(string)jk["state"]["type"]},
                                         { "values",(string)jk["state"]["value"] }
                                     };
+                                    }
+
+                                    JArray statesJA = (JArray)j["states"];
+                                    statesJA.Add(statesJ);
+
+                                    isListBexist = true;
+                                    break;
                                 }
-
-                                JArray statesJA = (JArray)j["states"];
-                                statesJA.Add(statesJ);
-
-                                isListBexist = true;
-                                break;
                             }
                         }
-                    }
-                    //如果没有txid则创建
-                    if (listJ.Count == 0 || isListBexist == false)
-                    {
-                        JObject j = new JObject();
-                        if ((string)jk["state"]["type"] == "Array")
+                        //如果没有txid则创建
+                        if (listJ.Count == 0 || isListBexist == false)
                         {
-                            j = new JObject
+                            JObject j = new JObject();
+                            if ((string)jk["state"]["type"] == "Array")
+                            {
+                                j = new JObject
                             {
                                 { "txid", (string)jk["txid"] },
                                 { "blocktime",blocktime},
@@ -321,10 +330,10 @@ namespace NeoBlockMongoStorage
                                 }
                                 } }
                             };
-                        }
-                        else
-                        {
-                            j = new JObject
+                            }
+                            else
+                            {
+                                j = new JObject
                             {
                                 { "txid", (string)jk["txid"] },
                                 { "blocktime",blocktime},
@@ -335,30 +344,31 @@ namespace NeoBlockMongoStorage
                                 }
                                 } }
                             };
+                            }
+
+
+                            listJ.Add(j);
                         }
-
-
-                        listJ.Add(j);
                     }
-                }
 
-                //每个txid逐一处理，存入数据库
-                foreach (JObject notifyJ in listJ)
-                {
-                    if (!IsDataExist("notify", "txid", (string)notifyJ["txid"]))
-                    {//判断是否重复
-                        MongoInsertOne("notify", notifyJ);
+                    //每个txid逐一处理，存入数据库
+                    foreach (JObject notifyJ in listJ)
+                    {
+                        if (!IsDataExist("notify", "txid", (string)notifyJ["txid"]))
+                        {//判断是否重复
+                            MongoInsertOne("notify", notifyJ);
+                        }
                     }
+
+                    DateTime end = DateTime.Now;
+                    var doTime = (end - start).TotalMilliseconds;
+                    Console.ForegroundColor = ConsoleColor.Cyan;
+                    Console.WriteLine("StorageNotifyData On Block " + doBlockIndex + " in " + doTime + "ms");
+                    Console.ForegroundColor = ConsoleColor.White;
                 }
 
                 //更新最新处理区块索引
                 SetSystemCounter("notify", doBlockIndex);
-
-                DateTime end = DateTime.Now;
-                var doTime = (end - start).TotalMilliseconds;
-                Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine("StorageNotifyData On Block " + doBlockIndex + " in " + doTime + "ms");
-                Console.ForegroundColor = ConsoleColor.White;
             }
         }
 
@@ -398,7 +408,7 @@ namespace NeoBlockMongoStorage
                     postData.Add("id", 1);
                     string postDataStr = JsonConvert.SerializeObject(postData);
                     //获取Cli Notify数据
-                    string resFulllog = Post(NeoCliJsonRPCUrl, postDataStr);
+                    string resFulllog = chh.Post(NeoCliJsonRPCUrl, postDataStr,Encoding.UTF8);
                     if (JObject.Parse(resFulllog)["result"] != null)
                     {
                         resFulllog = JObject.Parse(resFulllog)["result"].ToString();
@@ -419,14 +429,14 @@ namespace NeoBlockMongoStorage
                     }
                 }
 
-                //更新最新处理区块索引
-                SetSystemCounter("fulllog", doBlockIndex);
-
                 DateTime end = DateTime.Now;
                 var doTime = (end - start).TotalMilliseconds;
                 Console.ForegroundColor = ConsoleColor.Magenta;
                 Console.WriteLine("StorageFulllogData On Block " + doBlockIndex + " in " + doTime + "ms");
                 Console.ForegroundColor = ConsoleColor.White;
+
+                //更新最新处理区块索引
+                SetSystemCounter("fulllog", doBlockIndex);
             }
 
             client = null;
@@ -600,7 +610,7 @@ namespace NeoBlockMongoStorage
             return resStr;
         }
 
-        private static void MongoInsertOne(string collName, JObject J)
+        private static void MongoInsertOne(string collName, JObject J,bool isAsyn = false)
         {
             var client = new MongoClient(mongodbConnStr);
             var database = client.GetDatabase(mongodbDatabase);
@@ -608,7 +618,14 @@ namespace NeoBlockMongoStorage
 
             var document = BsonDocument.Parse(JsonConvert.SerializeObject(J));
 
-            collection.InsertOne(document);
+            if (isAsyn)
+            {
+                collection.InsertOneAsync(document);
+            }
+            else
+            {
+                collection.InsertOne(document);
+            }      
 
             client = null;
         }
@@ -748,37 +765,37 @@ namespace NeoBlockMongoStorage
             else { return true; }
         }
 
-        /// <summary>  
-        /// 指定Post地址使用Get 方式获取全部字符串  
-        /// </summary>  
-        /// <param name="url">请求后台地址</param>  
-        /// <param name="content">Post提交数据内容(utf-8编码的)</param>  
-        /// <returns></returns>  
-        public static string Post(string url, string content)
-        {
-            string result = "";
-            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
-            req.Method = "POST";
-            req.ContentType = "application/x-www-form-urlencoded";
+        ///// <summary>  
+        ///// 指定Post地址使用Get 方式获取全部字符串  
+        ///// </summary>  
+        ///// <param name="url">请求后台地址</param>  
+        ///// <param name="content">Post提交数据内容(utf-8编码的)</param>  
+        ///// <returns></returns>  
+        //public static string Post(string url, string content)
+        //{
+        //    string result = "";
+        //    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+        //    req.Method = "POST";
+        //    req.ContentType = "application/x-www-form-urlencoded";
 
-            #region 添加Post 参数  
-            byte[] data = Encoding.UTF8.GetBytes(content);
-            req.ContentLength = data.Length;
-            using (Stream reqStream = req.GetRequestStream())
-            {
-                reqStream.Write(data, 0, data.Length);
-                reqStream.Close();
-            }
-            #endregion
+        //    #region 添加Post 参数  
+        //    byte[] data = Encoding.UTF8.GetBytes(content);
+        //    req.ContentLength = data.Length;
+        //    using (Stream reqStream = req.GetRequestStream())
+        //    {
+        //        reqStream.Write(data, 0, data.Length);
+        //        reqStream.Close();
+        //    }
+        //    #endregion
 
-            HttpWebResponse resp = (HttpWebResponse)req.GetResponse();
-            Stream stream = resp.GetResponseStream();
-            //获取响应内容  
-            using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
-            {
-                result = reader.ReadToEnd();
-            }
-            return result;
-        }
+        //    HttpWebResponse resp = (HttpWebResponse)req.GetResponse();
+        //    Stream stream = resp.GetResponseStream();
+        //    //获取响应内容  
+        //    using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+        //    {
+        //        result = reader.ReadToEnd();
+        //    }
+        //    return result;
+        //}
     }
 }
