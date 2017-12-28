@@ -200,7 +200,8 @@ namespace NeoBlockMongoStorage
             }
             catch (Exception ex)
             {
-                throw;
+                return string.Empty;
+                //throw;
             }
         }
 

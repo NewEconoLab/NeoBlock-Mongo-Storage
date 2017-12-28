@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Text;
 using System.IO;
+using MongoDB.Bson.IO;
 
 namespace NeoBlockMongoStorage
 {
@@ -48,6 +49,16 @@ namespace NeoBlockMongoStorage
             Console.WriteLine("Block MaxIndex in DB:" + GetBlockMaxIndex());
 
             //创建任务
+            Task task_StorageUTXO = new Task(() => {
+                Console.WriteLine("异步循环执行StorageUTXOData开始");
+                while (true)
+                {
+                    //统计处理UTXO数据
+                    StorageUTXOData();
+
+                    Thread.Sleep(sleepTime);
+                }
+            });
             Task task_StorageNotify = new Task(() => {
                 Console.WriteLine("异步循环执行StorageNotifyData开始");
                 while (true)
@@ -69,6 +80,7 @@ namespace NeoBlockMongoStorage
                 }
             });
             //启动任务
+            task_StorageUTXO.Start();
             task_StorageNotify.Start();
             task_StorageFulllog.Start();
 
@@ -80,8 +92,8 @@ namespace NeoBlockMongoStorage
                 ////处理交易数据
                 //StorageTxData(); 交易数据在处理块数据时同时处理
 
-                //统计处理UTXO数据
-                StorageUTXOData();
+                ////统计处理UTXO数据
+                //StorageUTXOData();
                 ////处理notify数据
                 //StorageNotifyData();
                 ////处理fulllog数据
@@ -169,7 +181,7 @@ namespace NeoBlockMongoStorage
             foreach (JObject j in blockTx)
             {
                 j.Add("blockindex", blockIndex);
-                listBson.Add(BsonDocument.Parse(JsonConvert.SerializeObject(j)));
+                listBson.Add(BsonDocument.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(j)));
             }
             if (listBson.Count > 0 && !IsDataExist("tx", "txid", listBson[0]["txid"].AsString))
             {
@@ -178,6 +190,230 @@ namespace NeoBlockMongoStorage
             }
 
             client = null;
+        }
+
+        private static void StorageUTXOData()
+        {
+            var appName = "utxo";
+            var maxBlockindex = GetSystemCounter(appName);
+            //检查当前已有区块是否已处理所有交易utxo
+            DoStorageByEveryTxInBlock(maxBlockindex, appName);
+
+            var storageBlockindex = maxBlockindex + 1;
+            DoStorageByEveryTxInBlock(storageBlockindex, appName);
+        }
+
+        private static void StorageFulllogData()
+        {
+            var appName = "fulllog";
+            var maxBlockindex = GetSystemCounter(appName);
+            //检查当前已有区块是否已处理所有交易fulllog
+            DoStorageByEveryTxInBlock(maxBlockindex, appName);
+
+            var storageBlockindex = maxBlockindex + 1;
+            DoStorageByEveryTxInBlock(storageBlockindex, appName);
+        }
+
+        private static void DoStorageByEveryTxInBlock(int blockindex,string appName)
+        {
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+            var collection = database.GetCollection<BsonDocument>("block");
+
+            var findBson = BsonDocument.Parse("{index:" + blockindex + "}");
+            var query = collection.Find(findBson).ToList();
+            if (query.Count > 0)
+            {
+                BsonDocument queryB = query[0].AsBsonDocument;
+                BsonArray Txs = queryB["tx"].AsBsonArray;
+
+                var i = 0;
+                foreach (BsonValue bv in Txs)
+                {
+                    DateTime start = DateTime.Now;
+
+                    var jsonWriterSettings = new JsonWriterSettings { OutputMode = JsonOutputMode.Strict };
+                    JObject Tx =JObject.Parse(bv.ToJson(jsonWriterSettings));
+                    ConsoleColor cc = ConsoleColor.White;
+                    switch (appName)
+                    {
+                        case "utxo":
+                            DoStorageUTXOByTx(blockindex, Tx);
+                            cc = ConsoleColor.Yellow;
+                            break;
+                        case "fulllog":
+                            DoStorageFulllogByTx(blockindex, Tx);
+                            cc = ConsoleColor.Magenta;
+                            Thread.Sleep(sleepTime);
+                            break;
+                    }
+                    
+                    i++;
+                    DateTime end = DateTime.Now;
+                    var doTime = (end - start).TotalMilliseconds;
+                    Console.ForegroundColor = cc;
+                    Console.WriteLine("Storage_" + appName + "_Data On Block " + blockindex + " On Tx(" + i +  "/" + Txs.Count  + ") in " + doTime + "ms");
+
+                    //Thread.Sleep(sleepTime);
+                }
+            }
+
+            //更新已处理块高度
+            SetSystemCounter(appName, blockindex);
+
+            client = null;
+        }
+
+        private static void DoStorageUTXOByTx(int doBlockindex,JObject TxJ)
+        {            
+            JArray vinJA = (JArray)TxJ["vin"];
+            JArray voutJA = (JArray)TxJ["vout"];
+
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+            var collUTXO = database.GetCollection<UTXO>("utxo");
+
+            //先处理UTXO生成
+            if (voutJA.Count > 0)
+            {
+                foreach (JObject voutJ in voutJA)
+                {
+                    UTXO utxo = new UTXO();
+
+                    string Addr = (string)voutJ["address"];
+                    bool isUTXOexist = IsDataExist("utxo", "Addr", Addr);
+                    BsonDocument findB = BsonDocument.Parse("{Addr:'" + Addr + "'}");
+                    if (isUTXOexist)//已有UTXO记录则更新
+                    {
+                        //获取已有UTXO记录                               
+                        utxo = collUTXO.Find(findB).ToList()[0];
+                    }
+                    else
+                    {
+                        utxo.Addr = Addr;
+                    }
+                    //更新最后区块索引
+                    utxo.LastBlockindex = doBlockindex;
+                    //添加本vout数据
+                    UTXOrecord utxoR = new UTXOrecord
+                    {
+                        GetTx = (string)TxJ["txid"],
+                        N = (int)voutJ["n"],
+                        Asset = (string)voutJ["asset"],
+                        Value = (decimal)voutJ["value"]
+                    };
+                    //检查当前UTXO记录是否已被记录过
+                    bool isUTXOexist_R = false;
+                    if (utxo.UTXOrecord != null)
+                    {
+                        foreach (var r in utxo.UTXOrecord)
+                        {
+                            if (r.GetTx == utxoR.GetTx && r.N == utxoR.N)
+                            {
+                                isUTXOexist_R = true;
+                                break;
+                            }
+                        }
+                    }
+                    else { utxo.UTXOrecord = new List<UTXOrecord>(); }
+                    //只有不重复才会添加本vout数据并更新或插入
+                    if (!isUTXOexist_R)
+                    {
+                        utxo.UTXOrecord.Add(utxoR);
+
+                        if (isUTXOexist)
+                        {
+                            //已存在则更新
+                            collUTXO.ReplaceOne(findB, utxo);
+                        }
+                        else
+                        {
+                            //不存在则插入
+                            collUTXO.InsertOne(utxo);
+                        }
+                    }
+                }
+            }
+
+            //处理UTXO使用
+            if (vinJA.Count > 0)
+            {
+                foreach (JObject vinJ in vinJA)
+                {
+                    string vinTxid = (string)vinJ["txid"];
+                    int vinN = (int)vinJ["vout"];
+
+                    BsonDocument queryUTXOaddr = database.GetCollection<BsonDocument>("tx").Find(BsonDocument.Parse("{txid:'" + vinTxid + "'}")).ToList()[0];
+                    BsonArray queryUTXOaddr_vout = queryUTXOaddr["vout"].AsBsonArray;
+                    string Addr = string.Empty;
+                    foreach (BsonValue voutBV in queryUTXOaddr_vout)
+                    {
+                        if (voutBV["n"] == vinN)
+                        {
+                            Addr = voutBV["address"].AsString;
+                            break;
+                        }
+                    }
+
+                    BsonDocument findB = BsonDocument.Parse("{Addr:'" + Addr + "'}");
+                    UTXO utxo = database.GetCollection<UTXO>("utxo").Find(findB).ToList()[0];
+                    bool isUseExist = false;//判断是否已被写过use
+                    foreach (var r in utxo.UTXOrecord)
+                    {
+                        if (r.GetTx == vinTxid && r.N == vinN)
+                        {
+                            if (r.UseTx != null)
+                            {
+                                isUseExist = true;
+                                break;
+                            }
+
+                            r.UseTx = (string)TxJ["txid"];
+                            break;
+                        }
+                    }
+                    //只有不重复才写入
+                    if (!isUseExist)
+                    {
+                        collUTXO.ReplaceOne(findB, utxo);
+                    }
+                }
+            }
+
+            client = null;   
+        }
+
+        private static void DoStorageFulllogByTx(int doBlockindex, JObject TxJ)
+        {
+            //获取数据库Tx数据
+            string doTxid = (string)TxJ["txid"];
+
+            JObject postData = new JObject();
+            postData.Add("jsonrpc", "2.0");
+            postData.Add("method", "getfullloginfo");
+            postData.Add("params", new JArray() { doTxid });
+            postData.Add("id", 1);
+            string postDataStr = Newtonsoft.Json.JsonConvert.SerializeObject(postData);
+            //获取Cli Notify数据
+            string resFulllog = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8);
+            if (JObject.Parse(resFulllog)["result"] != null)
+            {
+                resFulllog = JObject.Parse(resFulllog)["result"].ToString();
+            }
+            else { resFulllog = null; }
+            if (resFulllog != null)
+            {
+                if (!IsDataExist("fulllog", "txid", doTxid))
+                {
+                    string fulllog7z = resFulllog;
+                    JObject j = new JObject
+                    {
+                        { "txid", doTxid },
+                        { "fulllog7z", fulllog7z }
+                    };
+                    MongoInsertOne("fulllog", j);
+                }
+            }
         }
 
         //private static void StorageTxData()
@@ -261,10 +497,10 @@ namespace NeoBlockMongoStorage
                 postData.Add("method", "getnotifyinfo");
                 postData.Add("params", new JArray() { doBlockIndex });
                 postData.Add("id", 1);
-                string postDataStr = JsonConvert.SerializeObject(postData);
+                string postDataStr = Newtonsoft.Json.JsonConvert.SerializeObject(postData);
                 //获取Cli Notify数据
                 string resNotify = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8);
-                resNotify = JsonConvert.SerializeObject(JObject.Parse(resNotify)["result"]);
+                resNotify = Newtonsoft.Json.JsonConvert.SerializeObject(JObject.Parse(resNotify)["result"]);
                 //GetNeoCliData("getnotifyinfo", new object[]
                 //{
                 //    doBlockIndex
@@ -359,244 +595,222 @@ namespace NeoBlockMongoStorage
                             MongoInsertOne("notify", notifyJ);
                         }
                     }
-
-                    DateTime end = DateTime.Now;
-                    var doTime = (end - start).TotalMilliseconds;
-                    Console.ForegroundColor = ConsoleColor.Cyan;
-                    Console.WriteLine("StorageNotifyData On Block " + doBlockIndex + " in " + doTime + "ms");
-                    Console.ForegroundColor = ConsoleColor.White;
                 }
-
                 //更新最新处理区块索引
                 SetSystemCounter("notify", doBlockIndex);
-            }
-        }
-
-        private static void StorageFulllogData()
-        {
-            var maxBlockindex = GetSystemCounter("fulllog");
-            //检查当前已有区块是否已处理所有交易fulllog
-            DoStorageFulllog(maxBlockindex);
-
-            var storageBlockindex = maxBlockindex + 1;
-            DoStorageFulllog(storageBlockindex);
-        }
-
-        private static void DoStorageFulllog(int doBlockIndex)
-        {
-            DateTime start = DateTime.Now;
-
-            var client = new MongoClient(mongodbConnStr);
-            var database = client.GetDatabase(mongodbDatabase);
-            var collection = database.GetCollection<BsonDocument>("block");
-
-            var findBson = BsonDocument.Parse("{index:" + doBlockIndex + "}");
-            var query = collection.Find(findBson).ToList();
-            if (query.Count > 0)
-            {
-                BsonDocument queryB = query[0].AsBsonDocument;
-
-                foreach (BsonValue bv in queryB["tx"].AsBsonArray)
-                {
-                    //获取数据库Tx数据
-                    string doTxid = (string)bv["txid"];
-
-                    JObject postData = new JObject();
-                    postData.Add("jsonrpc", "2.0");
-                    postData.Add("method", "getfullloginfo");
-                    postData.Add("params", new JArray() { doTxid });
-                    postData.Add("id", 1);
-                    string postDataStr = JsonConvert.SerializeObject(postData);
-                    //获取Cli Notify数据
-                    string resFulllog = chh.Post(NeoCliJsonRPCUrl, postDataStr,Encoding.UTF8);
-                    if (JObject.Parse(resFulllog)["result"] != null)
-                    {
-                        resFulllog = JObject.Parse(resFulllog)["result"].ToString();
-                    }
-                    else { resFulllog = null; }
-                    if (resFulllog != null)
-                    {
-                        if (!IsDataExist("fulllog", "txid", doTxid))
-                        {
-                            string fulllog7z = resFulllog;
-                            JObject j = new JObject
-                            {
-                                { "txid", doTxid },
-                                { "fulllog7z", fulllog7z }
-                            };
-                            MongoInsertOne("fulllog", j);
-                        }
-                    }
-                }
 
                 DateTime end = DateTime.Now;
                 var doTime = (end - start).TotalMilliseconds;
-                Console.ForegroundColor = ConsoleColor.Magenta;
-                Console.WriteLine("StorageFulllogData On Block " + doBlockIndex + " in " + doTime + "ms");
-                Console.ForegroundColor = ConsoleColor.White;
-
-                //更新最新处理区块索引
-                SetSystemCounter("fulllog", doBlockIndex);
-            }
-
-            client = null;
-        }
-
-        private static void StorageUTXOData()
-        {
-            var maxBlockindex = GetSystemCounter("utxo");
-            //检查当前已有区块是否已处理所有交易utxo
-            DoStorageUTXO(maxBlockindex);
-
-            var storageBlockindex = maxBlockindex + 1;
-            DoStorageUTXO(storageBlockindex);
-        }
-
-        private static void DoStorageUTXO(int doBlockIndex)
-        {
-            DateTime start = DateTime.Now;
-
-            var client = new MongoClient(mongodbConnStr);
-            var database = client.GetDatabase(mongodbDatabase);
-            var collection = database.GetCollection<BsonDocument>("block");
-
-            var findBson = BsonDocument.Parse("{index:" + doBlockIndex + "}");
-            var query = collection.Find(findBson).ToList();
-            if (query.Count > 0)
-            {
-                BsonDocument queryB = query[0].AsBsonDocument;
-
-                foreach (BsonValue bv in queryB["tx"].AsBsonArray)
-                {
-                    //获取数据库Tx数据
-                    string doTxid = (string)bv["txid"];
-                    collection = database.GetCollection<BsonDocument>("tx");
-                    var queryTx = collection.Find(BsonDocument.Parse("{txid:'" + doTxid + "'}")).ToList()[0];
-
-                    BsonArray vinBA = queryTx["vin"].AsBsonArray;
-                    BsonArray voutBA = queryTx["vout"].AsBsonArray;
-
-                    var collUTXO = database.GetCollection<UTXO>("utxo");
-                    //先处理UTXO生成
-                    if (voutBA.Count > 0)
-                    {
-                        foreach (BsonValue voutBV in voutBA)
-                        {
-                            UTXO utxo = new UTXO();
-
-                            string Addr = voutBV["address"].AsString;
-                            bool isUTXOexist = IsDataExist("utxo", "Addr", Addr);
-                            BsonDocument findB = BsonDocument.Parse("{Addr:'" + Addr + "'}");
-                            if (isUTXOexist)//已有UTXO记录则更新
-                            {
-                                //获取已有UTXO记录                               
-                                utxo = collUTXO.Find(findB).ToList()[0];
-                            }
-                            else
-                            {
-                                utxo.Addr = Addr;
-                            }
-                            //更新最后区块索引
-                            utxo.LastBlockindex = doBlockIndex;
-                            //添加本vout数据
-                            UTXOrecord utxoR = new UTXOrecord
-                            {
-                                GetTx = doTxid,
-                                N = voutBV["n"].AsInt32,
-                                Asset = voutBV["asset"].AsString,
-                                Value = decimal.Parse(voutBV["value"].AsString)
-                            };
-                            //检查当前UTXO记录是否已被记录过
-                            bool isUTXOexist_R = false;
-                            if (utxo.UTXOrecord != null)
-                            {
-                                foreach (var r in utxo.UTXOrecord)
-                                {
-                                    if (r.GetTx == utxoR.GetTx && r.N == utxoR.N)
-                                    {
-                                        isUTXOexist_R = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            else { utxo.UTXOrecord = new List<UTXOrecord>(); }
-                            //只有不重复才会添加本vout数据并更新或插入
-                            if (!isUTXOexist_R)
-                            {
-                                utxo.UTXOrecord.Add(utxoR);
-
-                                if (isUTXOexist)
-                                {
-                                    //已存在则更新
-                                    collUTXO.ReplaceOne(findB, utxo);
-                                }
-                                else
-                                {
-                                    //不存在则插入
-                                    collUTXO.InsertOne(utxo);
-                                }
-                            }
-                        }
-                    }
-
-                    //处理UTXO使用
-                    if (vinBA.Count > 0)
-                    {
-                        foreach (BsonValue vinBV in vinBA)
-                        {
-                            string vinTxid = vinBV["txid"].AsString;
-                            int vinN = vinBV["vout"].AsInt32;
-
-                            BsonDocument queryUTXOaddr = database.GetCollection<BsonDocument>("tx").Find(BsonDocument.Parse("{txid:'" + vinTxid + "'}")).ToList()[0];
-                            BsonArray queryUTXOaddr_vout = queryUTXOaddr["vout"].AsBsonArray;
-                            string Addr = string.Empty;
-                            foreach (BsonValue voutBV in queryUTXOaddr_vout)
-                            {
-                                if (voutBV["n"] == vinN)
-                                {
-                                    Addr = voutBV["address"].AsString;
-                                    break;
-                                }
-                            }
-
-                            BsonDocument findB = BsonDocument.Parse("{Addr:'" + Addr + "'}");
-                            UTXO utxo = database.GetCollection<UTXO>("utxo").Find(findB).ToList()[0];
-                            bool isUseExist = false;//判断是否已被写过use
-                            foreach (var r in utxo.UTXOrecord)
-                            {
-                                if (r.GetTx == vinTxid && r.N == vinN)
-                                {
-                                    if (r.UseTx != null)
-                                    {
-                                        isUseExist = true;
-                                        break;
-                                    }
-
-                                    r.UseTx = queryTx["txid"].AsString;
-                                    break;
-                                }
-                            }
-                            //只有不重复才写入
-                            if (!isUseExist)
-                            {
-                                database.GetCollection<UTXO>("utxo").ReplaceOne(findB, utxo);
-                            }
-                        }
-                    }
-                }
-
-                //更新utxo已处理块高度
-                SetSystemCounter("utxo", doBlockIndex);
-
-                DateTime end = DateTime.Now;
-                var doTime = (end - start).TotalMilliseconds;
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine("StorageUTXOData On Block " + doBlockIndex + " in " + doTime + "ms");
-                Console.ForegroundColor = ConsoleColor.White;
-
-                client = null;
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine("StorageNotifyData On Block " + doBlockIndex + " in " + doTime + "ms");
             }
         }
+
+        //private static void DoStorageFulllog(int doBlockIndex)
+        //{
+        //    DateTime start = DateTime.Now;
+
+        //    var client = new MongoClient(mongodbConnStr);
+        //    var database = client.GetDatabase(mongodbDatabase);
+        //    var collection = database.GetCollection<BsonDocument>("block");
+
+        //    var findBson = BsonDocument.Parse("{index:" + doBlockIndex + "}");
+        //    var query = collection.Find(findBson).ToList();
+        //    if (query.Count > 0)
+        //    {
+        //        BsonDocument queryB = query[0].AsBsonDocument;
+
+        //        foreach (BsonValue bv in queryB["tx"].AsBsonArray)
+        //        {
+        //            //获取数据库Tx数据
+        //            string doTxid = (string)bv["txid"];
+
+        //            JObject postData = new JObject();
+        //            postData.Add("jsonrpc", "2.0");
+        //            postData.Add("method", "getfullloginfo");
+        //            postData.Add("params", new JArray() { doTxid });
+        //            postData.Add("id", 1);
+        //            string postDataStr = Newtonsoft.Json.JsonConvert.SerializeObject(postData);
+        //            //获取Cli Notify数据
+        //            string resFulllog = chh.Post(NeoCliJsonRPCUrl, postDataStr,Encoding.UTF8);
+        //            if (JObject.Parse(resFulllog)["result"] != null)
+        //            {
+        //                resFulllog = JObject.Parse(resFulllog)["result"].ToString();
+        //            }
+        //            else { resFulllog = null; }
+        //            if (resFulllog != null)
+        //            {
+        //                if (!IsDataExist("fulllog", "txid", doTxid))
+        //                {
+        //                    string fulllog7z = resFulllog;
+        //                    JObject j = new JObject
+        //                    {
+        //                        { "txid", doTxid },
+        //                        { "fulllog7z", fulllog7z }
+        //                    };
+        //                    MongoInsertOne("fulllog", j);
+        //                }
+        //            }
+        //        }
+
+        //        DateTime end = DateTime.Now;
+        //        var doTime = (end - start).TotalMilliseconds;
+        //        Console.ForegroundColor = ConsoleColor.Magenta;
+        //        Console.WriteLine("StorageFulllogData On Block " + doBlockIndex + " in " + doTime + "ms");
+        //        Console.ForegroundColor = ConsoleColor.White;
+
+        //        //更新最新处理区块索引
+        //        SetSystemCounter("fulllog", doBlockIndex);
+        //    }
+
+        //    client = null;
+        //}
+
+        //private static void DoStorageUTXO(int doBlockIndex)
+        //{
+        //    DateTime start = DateTime.Now;
+
+        //    var client = new MongoClient(mongodbConnStr);
+        //    var database = client.GetDatabase(mongodbDatabase);
+        //    var collection = database.GetCollection<BsonDocument>("block");
+
+        //    var findBson = BsonDocument.Parse("{index:" + doBlockIndex + "}");
+        //    var query = collection.Find(findBson).ToList();
+        //    if (query.Count > 0)
+        //    {
+        //        BsonDocument queryB = query[0].AsBsonDocument;
+
+        //        foreach (BsonValue bv in queryB["tx"].AsBsonArray)
+        //        {
+        //            //获取数据库Tx数据
+        //            string doTxid = (string)bv["txid"];
+        //            collection = database.GetCollection<BsonDocument>("tx");
+        //            var queryTx = collection.Find(BsonDocument.Parse("{txid:'" + doTxid + "'}")).ToList()[0];
+
+        //            BsonArray vinBA = queryTx["vin"].AsBsonArray;
+        //            BsonArray voutBA = queryTx["vout"].AsBsonArray;
+
+        //            var collUTXO = database.GetCollection<UTXO>("utxo");
+        //            //先处理UTXO生成
+        //            if (voutBA.Count > 0)
+        //            {
+        //                foreach (BsonValue voutBV in voutBA)
+        //                {
+        //                    UTXO utxo = new UTXO();
+
+        //                    string Addr = voutBV["address"].AsString;
+        //                    bool isUTXOexist = IsDataExist("utxo", "Addr", Addr);
+        //                    BsonDocument findB = BsonDocument.Parse("{Addr:'" + Addr + "'}");
+        //                    if (isUTXOexist)//已有UTXO记录则更新
+        //                    {
+        //                        //获取已有UTXO记录                               
+        //                        utxo = collUTXO.Find(findB).ToList()[0];
+        //                    }
+        //                    else
+        //                    {
+        //                        utxo.Addr = Addr;
+        //                    }
+        //                    //更新最后区块索引
+        //                    utxo.LastBlockindex = doBlockIndex;
+        //                    //添加本vout数据
+        //                    UTXOrecord utxoR = new UTXOrecord
+        //                    {
+        //                        GetTx = doTxid,
+        //                        N = voutBV["n"].AsInt32,
+        //                        Asset = voutBV["asset"].AsString,
+        //                        Value = decimal.Parse(voutBV["value"].AsString)
+        //                    };
+        //                    //检查当前UTXO记录是否已被记录过
+        //                    bool isUTXOexist_R = false;
+        //                    if (utxo.UTXOrecord != null)
+        //                    {
+        //                        foreach (var r in utxo.UTXOrecord)
+        //                        {
+        //                            if (r.GetTx == utxoR.GetTx && r.N == utxoR.N)
+        //                            {
+        //                                isUTXOexist_R = true;
+        //                                break;
+        //                            }
+        //                        }
+        //                    }
+        //                    else { utxo.UTXOrecord = new List<UTXOrecord>(); }
+        //                    //只有不重复才会添加本vout数据并更新或插入
+        //                    if (!isUTXOexist_R)
+        //                    {
+        //                        utxo.UTXOrecord.Add(utxoR);
+
+        //                        if (isUTXOexist)
+        //                        {
+        //                            //已存在则更新
+        //                            collUTXO.ReplaceOne(findB, utxo);
+        //                        }
+        //                        else
+        //                        {
+        //                            //不存在则插入
+        //                            collUTXO.InsertOne(utxo);
+        //                        }
+        //                    }
+        //                }
+        //            }
+
+        //            //处理UTXO使用
+        //            if (vinBA.Count > 0)
+        //            {
+        //                foreach (BsonValue vinBV in vinBA)
+        //                {
+        //                    string vinTxid = vinBV["txid"].AsString;
+        //                    int vinN = vinBV["vout"].AsInt32;
+
+        //                    BsonDocument queryUTXOaddr = database.GetCollection<BsonDocument>("tx").Find(BsonDocument.Parse("{txid:'" + vinTxid + "'}")).ToList()[0];
+        //                    BsonArray queryUTXOaddr_vout = queryUTXOaddr["vout"].AsBsonArray;
+        //                    string Addr = string.Empty;
+        //                    foreach (BsonValue voutBV in queryUTXOaddr_vout)
+        //                    {
+        //                        if (voutBV["n"] == vinN)
+        //                        {
+        //                            Addr = voutBV["address"].AsString;
+        //                            break;
+        //                        }
+        //                    }
+
+        //                    BsonDocument findB = BsonDocument.Parse("{Addr:'" + Addr + "'}");
+        //                    UTXO utxo = database.GetCollection<UTXO>("utxo").Find(findB).ToList()[0];
+        //                    bool isUseExist = false;//判断是否已被写过use
+        //                    foreach (var r in utxo.UTXOrecord)
+        //                    {
+        //                        if (r.GetTx == vinTxid && r.N == vinN)
+        //                        {
+        //                            if (r.UseTx != null)
+        //                            {
+        //                                isUseExist = true;
+        //                                break;
+        //                            }
+
+        //                            r.UseTx = queryTx["txid"].AsString;
+        //                            break;
+        //                        }
+        //                    }
+        //                    //只有不重复才写入
+        //                    if (!isUseExist)
+        //                    {
+        //                        database.GetCollection<UTXO>("utxo").ReplaceOne(findB, utxo);
+        //                    }
+        //                }
+        //            }
+        //        }
+
+        //        //更新utxo已处理块高度
+        //        SetSystemCounter("utxo", doBlockIndex);
+
+        //        DateTime end = DateTime.Now;
+        //        var doTime = (end - start).TotalMilliseconds;
+        //        Console.ForegroundColor = ConsoleColor.Yellow;
+        //        Console.WriteLine("StorageUTXOData On Block " + doBlockIndex + " in " + doTime + "ms");
+        //        Console.ForegroundColor = ConsoleColor.White;
+
+        //        client = null;
+        //    }
+        //}
 
         private static string GetNeoCliData(string method, object[] paras)
         {
@@ -604,8 +818,8 @@ namespace NeoBlockMongoStorage
             JsonRpcWebClient rpc = new JsonRpcWebClient(rpcEndpoint);
 
             var response = rpc.InvokeAsync<JObject>(method, paras);
-            JObject resJ = JObject.Parse(JsonConvert.SerializeObject(response.Result));
-            var resStr = JsonConvert.SerializeObject(resJ["result"]);
+            JObject resJ = JObject.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(response.Result));
+            var resStr = Newtonsoft.Json.JsonConvert.SerializeObject(resJ["result"]);
 
             return resStr;
         }
@@ -616,7 +830,7 @@ namespace NeoBlockMongoStorage
             var database = client.GetDatabase(mongodbDatabase);
             var collection = database.GetCollection<BsonDocument>(collName);
 
-            var document = BsonDocument.Parse(JsonConvert.SerializeObject(J));
+            var document = BsonDocument.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(J));
 
             if (isAsyn)
             {
