@@ -50,13 +50,21 @@ namespace NeoBlockMongoStorage
 
             //创建任务
             Task task_StorageUTXO = new Task(() => {
+                
                 Console.WriteLine("异步循环执行StorageUTXOData开始");
                 while (true)
                 {
+                    DateTime start = DateTime.Now;
+
                     //统计处理UTXO数据
                     StorageUTXOData();
 
-                    Thread.Sleep(sleepTime);
+                    //Thread.Sleep(sleepTime);
+
+                    DateTime end = DateTime.Now;
+                    var doTime = (end - start).TotalMilliseconds;
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine("StorageUTXOData in " + doTime + "ms");
                 }
             });
             Task task_StorageNotify = new Task(() => {
@@ -235,11 +243,13 @@ namespace NeoBlockMongoStorage
                     var jsonWriterSettings = new JsonWriterSettings { OutputMode = JsonOutputMode.Strict };
                     JObject Tx =JObject.Parse(bv.ToJson(jsonWriterSettings));
                     ConsoleColor cc = ConsoleColor.White;
+                    bool isShow = true;
                     switch (appName)
                     {
                         case "utxo":
                             DoStorageUTXOByTx(Tx);
-                            cc = ConsoleColor.Yellow;
+                            isShow = false;
+                            //cc = ConsoleColor.Yellow;
                             break;
                         case "fulllog":
                             DoStorageFulllogByTx(Tx);
@@ -247,19 +257,23 @@ namespace NeoBlockMongoStorage
                             Thread.Sleep(sleepTime);
                             break;
                     }
-                    
+
                     i++;
-                    DateTime end = DateTime.Now;
-                    var doTime = (end - start).TotalMilliseconds;
-                    Console.ForegroundColor = cc;
-                    Console.WriteLine("Storage_" + appName + "_Data On Block " + blockindex + " On Tx(" + i +  "/" + Txs.Count  + ") in " + doTime + "ms");
+
+                    if (isShow == true)
+                    {
+                        DateTime end = DateTime.Now;
+                        var doTime = (end - start).TotalMilliseconds;
+                        Console.ForegroundColor = cc;
+                        Console.WriteLine("Storage_" + appName + "_Data On Block " + blockindex + " On Tx(" + i + "/" + Txs.Count + ") in " + doTime + "ms");
+                    }
 
                     //Thread.Sleep(sleepTime);
                 }
-            }
 
-            //更新已处理块高度
-            SetSystemCounter(appName, blockindex);
+                //更新已处理块高度
+                SetSystemCounter(appName, blockindex);
+            }
 
             client = null;
         }
