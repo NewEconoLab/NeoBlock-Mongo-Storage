@@ -25,6 +25,7 @@ namespace NeoBlockMongoStorage
         static string mongodbDatabase = string.Empty;
         static string NeoCliJsonRPCUrl = string.Empty;
         static int sleepTime = 0;
+        static bool utxoIsSleep = false;
 
         static void Main(string[] args)
         {
@@ -37,6 +38,9 @@ namespace NeoBlockMongoStorage
             mongodbDatabase = config["mongodbDatabase"];
             NeoCliJsonRPCUrl = config["NeoCliJsonRPCUrl"];
             sleepTime = int.Parse(config["sleepTime"]);
+            if (int.Parse(config["utxoIsSleep"]) == 1) {
+                utxoIsSleep = true;
+            }
 
             Console.WriteLine("NeoBlockMongoStorage Start!");
             Console.WriteLine("*************************************");
@@ -59,7 +63,7 @@ namespace NeoBlockMongoStorage
                     //统计处理UTXO数据
                     StorageUTXOData();
 
-                    //Thread.Sleep(sleepTime);
+                    if (utxoIsSleep) { Thread.Sleep(sleepTime); }
 
                     DateTime end = DateTime.Now;
                     var doTime = (end - start).TotalMilliseconds;
