@@ -140,6 +140,9 @@ namespace NeoBlockMongoStorage
 
             int storageIndex = maxIndex + 1;
             DoStorageBlockTXData(storageIndex);
+
+            //检查asset，如果有新的就存储
+            CheckAssetAndStorage();
         }
 
         private static void DoStorageBlockTXData(int doIndex)
@@ -202,6 +205,44 @@ namespace NeoBlockMongoStorage
             }
 
             client = null;
+        }
+
+        private static void CheckAssetAndStorage() {
+            DateTime start = DateTime.Now;
+
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+            var collection = database.GetCollection<BsonDocument>("tx");
+            BsonDocument findB = BsonDocument.Parse("{type:'RegisterTransaction'}");
+            var query = collection.Find(findB).ToList();
+            if (query.Count > 0)
+            {
+                collection = database.GetCollection<BsonDocument>("asset");
+
+                foreach (var tx in query)
+                {
+                    string txid = tx["txid"].AsString;
+                    //只有asset没有记录才会处理
+                    if (!IsDataExist("asset", "id", txid)) {
+                        //获取Cli asset数据
+                        string resAsset = GetNeoCliData("getassetstate", new object[] { txid });
+
+                        //控制接口调用频度
+                        Thread.Sleep(sleepTime);
+
+                        //获取有效数据则存储asset
+                        if (resAsset != "null")
+                        {
+                            MongoInsertOne("asset",JObject.Parse(resAsset));
+
+                            DateTime end = DateTime.Now;
+                            var doTime = (end - start).TotalMilliseconds;
+                            Console.ForegroundColor = ConsoleColor.Green;
+                            Console.WriteLine("StorageAssetData On Tx " + txid + " in " + doTime + "ms");
+                        }
+                    }
+                }
+            }
         }
 
         private static void StorageUTXOData()
