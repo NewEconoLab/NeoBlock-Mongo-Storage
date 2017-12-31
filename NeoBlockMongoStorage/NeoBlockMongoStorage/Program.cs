@@ -300,72 +300,21 @@ namespace NeoBlockMongoStorage
                     UTXO utxo = new UTXO
                     {
                         addr = (string)voutJ["address"],
-                        voutTx = txid,
-                        voutN = (int)voutJ["n"],
+                        txid = txid,
+                        n = (int)voutJ["n"],
                         asset = (string)voutJ["asset"],
                         value = (decimal)voutJ["value"]
                     };
 
                     //检查是否已有入库,无则入库
-                    string findStr = "{{voutTx:'{0}',voutN:{1}}}";
-                    findStr = string.Format(findStr, utxo.voutTx, utxo.voutN);
+                    string findStr = "{{txid:'{0}',n:{1}}}";
+                    findStr = string.Format(findStr, utxo.txid, utxo.n);
                     BsonDocument findB = BsonDocument.Parse(findStr);
                     List<UTXO> query = collUTXO.Find(findB).ToList();
                     if (query.Count == 0)
                     {
                         collUTXO.InsertOne(utxo);
                     }
-                    //bool isUTXOexist = IsDataExist("utxo", "addr", addr);
-                    //BsonDocument findB = BsonDocument.Parse("{addr:'" + addr + "'}");
-                    //if (isUTXOexist)//已有UTXO记录则更新
-                    //{
-                    //    //获取已有UTXO记录                               
-                    //    utxo = collUTXO.Find(findB).ToList()[0];
-                    //}
-                    //else
-                    //{
-                    //    utxo.Addr = addr;
-                    //}
-                    ////更新最后区块索引
-                    //utxo.LastBlockindex = doBlockindex;
-                    ////添加本vout数据
-                    //UTXOrecord utxoR = new UTXOrecord
-                    //{
-                    //    voutTx = (string)TxJ["txid"],
-                    //    voutN = (int)voutJ["n"],
-                    //    asset = (string)voutJ["asset"],
-                    //    value = (decimal)voutJ["value"]
-                    //};
-                    //检查当前UTXO记录是否已被记录过
-                    //bool isUTXOexist_R = false;
-                    //if (utxo.UTXOrecord != null)
-                    //{
-                    //    foreach (var r in utxo.UTXOrecord)
-                    //    {
-                    //        if (r.getTx == utxoR.voutTx && r.n == utxoR.voutN)
-                    //        {
-                    //            isUTXOexist_R = true;
-                    //            break;
-                    //        }
-                    //    }
-                    //}
-                    //else { utxo.UTXOrecord = new List<UTXOrecord>(); }
-                    ////只有不重复才会添加本vout数据并更新或插入
-                    //if (!isUTXOexist_R)
-                    //{
-                    //    utxo.UTXOrecord.Add(utxoR);
-
-                    //    if (isUTXOexist)
-                    //    {
-                    //        //已存在则更新
-                    //        collUTXO.ReplaceOne(findB, utxo);
-                    //    }
-                    //    else
-                    //    {
-                    //        //不存在则插入
-                    //        collUTXO.InsertOne(utxo);
-                    //    }
-                    //}
                 }
             }
 
@@ -374,58 +323,23 @@ namespace NeoBlockMongoStorage
             {
                 foreach (JObject vinJ in vinJA)
                 {
-                    string vinTx = txid;
-
                     string voutTx = (string)vinJ["txid"];
                     int voutN = (int)vinJ["vout"];
 
-                    //BsonDocument queryUTXOaddr = database.GetCollection<BsonDocument>("tx").Find(BsonDocument.Parse("{txid:'" + voutTx + "'}")).ToList()[0];
-                    //BsonArray queryUTXOaddr_vout = queryUTXOaddr["vout"].AsBsonArray;
-                    //string addr = string.Empty;
-                    //foreach (BsonValue voutBV in queryUTXOaddr_vout)
-                    //{
-                    //    if (voutBV["n"] == voutN)
-                    //    {
-                    //        addr = voutBV["address"].AsString;
-                    //        break;
-                    //    }
-                    //}
-
                     //查找UTXO创建记录
-                    string findStr = "{{voutTx:'{0}',voutN:{1}}}";
+                    string findStr = "{{txid:'{0}',n:{1}}}";
                     findStr = string.Format(findStr, voutTx, voutN);
                     BsonDocument findB = BsonDocument.Parse(findStr);
                     UTXO utxo = collUTXO.Find(findB).ToList()[0];
                     if (utxo != null)
                     {
                         //只有不重复才更新
-                        if (utxo.vinTx == null)
+                        if (utxo.used == string.Empty)
                         {
-                            utxo.vinTx = vinTx;
+                            utxo.used = txid;
                             collUTXO.ReplaceOne(findB, utxo);
                         }
                     }
-
-                    //bool isUseExist = false;//判断是否已被写过use
-                    //foreach (var r in utxo.UTXOrecord)
-                    //{
-                    //    if (r.getTx == voutTx && r.n == voutN)
-                    //    {
-                    //        if (r.useTx != null)
-                    //        {
-                    //            isUseExist = true;
-                    //            break;
-                    //        }
-
-                    //        r.useTx = (string)TxJ["txid"];
-                    //        break;
-                    //    }
-                    //}
-                    ////只有不重复才写入
-                    //if (!isUseExist)
-                    //{
-                    //    collUTXO.ReplaceOne(findB, utxo);
-                    //}
                 }
             }
 

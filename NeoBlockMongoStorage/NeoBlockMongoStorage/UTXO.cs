@@ -17,12 +17,21 @@ namespace NeoBlockMongoStorage
 
     [BsonIgnoreExtraElements]
     class UTXO {
+        public UTXO(){
+            addr = string.Empty;
+            txid = string.Empty;
+            n = 0;
+            asset = string.Empty;
+            value = 0;
+            used = string.Empty;
+        }
+
         public ObjectId _id { get; set; }
         public string addr { get; set; }
-        public string voutTx { get; set; }
-        public int voutN { get; set; }
+        public string txid { get; set; }
+        public int n { get; set; }
         public string asset { get; set; }
         public decimal value { get; set; }
-        public string vinTx { get; set; }
+        public string used { get; set; }
     }
 }
