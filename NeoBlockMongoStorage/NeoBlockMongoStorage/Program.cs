@@ -224,22 +224,26 @@ namespace NeoBlockMongoStorage
                     string txid = tx["txid"].AsString;
                     //只有asset没有记录才会处理
                     if (!IsDataExist("asset", "id", txid)) {
-                        //获取Cli asset数据
-                        string resAsset = GetNeoCliData("getassetstate", new object[] { txid });
+                        ////获取Cli asset数据
+                        //string resAsset = GetNeoCliData("getassetstate", new object[] { txid });
 
-                        //控制接口调用频度
-                        Thread.Sleep(sleepTime);
+                        ////控制接口调用频度
+                        //Thread.Sleep(sleepTime);
 
-                        //获取有效数据则存储asset
-                        if (resAsset != "null")
-                        {
-                            MongoInsertOne("asset",JObject.Parse(resAsset));
+                        ////获取有效数据则存储asset
+                        //if (resAsset != "null")
+                        //{
+                        var jsonWriterSettings = new JsonWriterSettings { OutputMode = JsonOutputMode.Strict };
+                        JObject assetJ = JObject.Parse(tx["asset"].ToJson(jsonWriterSettings));
+                        assetJ.Add("id", txid);
 
-                            DateTime end = DateTime.Now;
-                            var doTime = (end - start).TotalMilliseconds;
-                            Console.ForegroundColor = ConsoleColor.Green;
-                            Console.WriteLine("StorageAssetData On Tx " + txid + " in " + doTime + "ms");
-                        }
+                        MongoInsertOne("asset",assetJ);
+
+                        DateTime end = DateTime.Now;
+                        var doTime = (end - start).TotalMilliseconds;
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.WriteLine("StorageAssetData On Tx " + txid + " in " + doTime + "ms");
+                        //}
                     }
                 }
             }
