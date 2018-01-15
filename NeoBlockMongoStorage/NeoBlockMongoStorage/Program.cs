@@ -296,7 +296,7 @@ namespace NeoBlockMongoStorage
                     switch (appName)
                     {
                         case "utxo":
-                            DoStorageUTXOByTx(Tx);
+                            DoStorageUTXOByTx(blockindex,Tx);
                             isShow = false;
                             //cc = ConsoleColor.Yellow;
                             break;
@@ -327,7 +327,7 @@ namespace NeoBlockMongoStorage
             client = null;
         }
 
-        private static void DoStorageUTXOByTx(JObject TxJ)
+        private static void DoStorageUTXOByTx(int blockindex, JObject TxJ)
         {
             string txid = (string)TxJ["txid"];
             JArray vinJA = (JArray)TxJ["vin"];
