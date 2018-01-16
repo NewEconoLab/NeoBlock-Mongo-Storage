@@ -327,7 +327,7 @@ namespace NeoBlockMongoStorage
             client = null;
         }
 
-        private static void DoStorageAddressByVout(int blockindex, string vout_addr,string vout_txid)
+        private static void DoStorageAddressByVoutVin(int blockindex, string VoutVin_addr,string VoutVin_txid)
         {
             var client = new MongoClient(mongodbConnStr);
             var database = client.GetDatabase(mongodbDatabase);
@@ -338,7 +338,7 @@ namespace NeoBlockMongoStorage
             DateTime blockTime = TimeZoneInfo.ConvertTime(new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc), TimeZoneInfo.Local).AddSeconds(blockTimeTS);
             //处理address入库
             var collAddr = database.GetCollection<Address>("address");
-            var findBson = BsonDocument.Parse("{addr:'" + vout_addr + "'}");
+            var findBson = BsonDocument.Parse("{addr:'" + VoutVin_addr + "'}");
             var queryAddr = collAddr.Find(findBson).ToList();
             Address addr = new Address();
             if (queryAddr.Count == 0)
@@ -346,16 +346,16 @@ namespace NeoBlockMongoStorage
                 //插入结构
                 addr = new Address
                 {
-                    addr = vout_addr,
+                    addr = VoutVin_addr,
                     firstuse = new AddrUse
                     {
-                        txid = vout_txid,
+                        txid = VoutVin_txid,
                         blockindex = blockindex,
                         blocktime = blockTime
                     },
                     lastuse = new AddrUse
                     {
-                        txid = vout_txid,
+                        txid = VoutVin_txid,
                         blockindex = blockindex,
                         blocktime = blockTime
                     },
@@ -367,10 +367,10 @@ namespace NeoBlockMongoStorage
             else if(queryAddr.Count>0) {
                 //更新结构
                 addr = queryAddr[0];
-                if (addr.lastuse.txid != vout_txid) {
+                if (addr.lastuse.txid != VoutVin_txid) {
                     addr.lastuse = new AddrUse
                     {
-                        txid = vout_txid,
+                        txid = VoutVin_txid,
                         blockindex = blockindex,
                         blocktime = blockTime
                     };
@@ -417,7 +417,7 @@ namespace NeoBlockMongoStorage
                         collUTXO.InsertOne(utxo);
                     }
 
-                    DoStorageAddressByVout(blockindex, utxo.addr, utxo.txid);
+                    DoStorageAddressByVoutVin(blockindex, utxo.addr, utxo.txid);
                 }
             }
 
@@ -443,6 +443,8 @@ namespace NeoBlockMongoStorage
                             collUTXO.ReplaceOne(findB, utxo);
                         }
                     }
+
+                    DoStorageAddressByVoutVin(blockindex, utxo.addr, utxo.txid);
                 }
             }
 
