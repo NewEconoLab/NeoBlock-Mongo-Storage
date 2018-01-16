@@ -333,31 +333,52 @@ namespace NeoBlockMongoStorage
             var database = client.GetDatabase(mongodbDatabase);
             //获取block时间（本地时区时区）
             var collBlock = database.GetCollection<BsonDocument>("block");
-            var queryBlock = collBlock.Find("{index:'" + blockindex + "'}").ToList()[0];
-            long blockTimeTS = queryBlock["time"].AsInt64;
-            DateTime blockTime = TimeZone.CurrentTimeZone.ToLocalTime(new System.DateTime(1970, 1, 1)).AddSeconds(blockTimeTS);
+            var queryBlock = collBlock.Find("{index:" + blockindex + "}").ToList()[0];
+            int blockTimeTS = queryBlock["time"].AsInt32;
+            DateTime blockTime = TimeZoneInfo.ConvertTime(new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc), TimeZoneInfo.Local).AddSeconds(blockTimeTS);
             //处理address入库
             var collAddr = database.GetCollection<Address>("address");
-            //插入结构
-            Address addr = new Address
+            var findBson = BsonDocument.Parse("{addr:'" + vout_addr + "'}");
+            var queryAddr = collAddr.Find(findBson).ToList();
+            Address addr = new Address();
+            if (queryAddr.Count == 0)
             {
-                addr = vout_addr,
-                firstuse = new AddrUse
+                //插入结构
+                addr = new Address
                 {
-                    txid = vout_txid,
-                    blockindex = blockindex,
-                    blocktime = blockTime
-                },
-                lastuse = new AddrUse
-                {
-                    txid = vout_txid,
-                    blockindex = blockindex,
-                    blocktime = blockTime
-                },
-                txcount = 1
-            };
-            //更新结构
+                    addr = vout_addr,
+                    firstuse = new AddrUse
+                    {
+                        txid = vout_txid,
+                        blockindex = blockindex,
+                        blocktime = blockTime
+                    },
+                    lastuse = new AddrUse
+                    {
+                        txid = vout_txid,
+                        blockindex = blockindex,
+                        blocktime = blockTime
+                    },
+                    txcount = 1
+                };
 
+                collAddr.InsertOne(addr);
+            }
+            else if(queryAddr.Count>0) {
+                //更新结构
+                addr = queryAddr[0];
+                if (addr.lastuse.txid != vout_txid) {
+                    addr.lastuse = new AddrUse
+                    {
+                        txid = vout_txid,
+                        blockindex = blockindex,
+                        blocktime = blockTime
+                    };
+                    addr.txcount++;
+
+                    collAddr.ReplaceOne(findBson, addr);
+                }
+            }
 
             client = null;
         }
