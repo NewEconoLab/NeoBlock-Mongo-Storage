@@ -140,9 +140,6 @@ namespace NeoBlockMongoStorage
 
             int storageIndex = maxIndex + 1;
             DoStorageBlockTXData(storageIndex);
-
-            //检查asset，如果有新的就存储
-            CheckAssetAndStorage();
         }
 
         private static void DoStorageBlockTXData(int doIndex)
@@ -207,46 +204,46 @@ namespace NeoBlockMongoStorage
             client = null;
         }
 
-        private static void CheckAssetAndStorage() {
+        private static void DoAssetStorageByVout(string assetID) {
             DateTime start = DateTime.Now;
 
-            var client = new MongoClient(mongodbConnStr);
-            var database = client.GetDatabase(mongodbDatabase);
-            var collection = database.GetCollection<BsonDocument>("tx");
-            BsonDocument findB = BsonDocument.Parse("{type:'RegisterTransaction'}");
-            var query = collection.Find(findB).ToList();
-            if (query.Count > 0)
-            {
-                collection = database.GetCollection<BsonDocument>("asset");
+            //var client = new MongoClient(mongodbConnStr);
+            //var database = client.GetDatabase(mongodbDatabase);
+            //var collection = database.GetCollection<BsonDocument>("tx");
+            //BsonDocument findB = BsonDocument.Parse("{type:'RegisterTransaction'}");
+            //var query = collection.Find(findB).ToList();
+            //if (query.Count > 0)
+            //{
+            //    collection = database.GetCollection<BsonDocument>("asset");
 
-                foreach (var tx in query)
-                {
-                    string txid = tx["txid"].AsString;
+            //    foreach (var tx in query)
+            //    {
+            //        string txid = tx["txid"].AsString;
                     //只有asset没有记录才会处理
-                    if (!IsDataExist("asset", "id", txid)) {
-                        ////获取Cli asset数据
-                        //string resAsset = GetNeoCliData("getassetstate", new object[] { txid });
+                    if (!IsDataExist("asset", "id", assetID)) {
+                        //获取Cli asset数据
+                        string resAsset = GetNeoCliData("getassetstate", new object[] { assetID });
 
-                        ////控制接口调用频度
-                        //Thread.Sleep(sleepTime);
+                        //控制接口调用频度
+                        Thread.Sleep(sleepTime);
 
-                        ////获取有效数据则存储asset
-                        //if (resAsset != "null")
-                        //{
-                        var jsonWriterSettings = new JsonWriterSettings { OutputMode = JsonOutputMode.Strict };
-                        JObject assetJ = JObject.Parse(tx["asset"].ToJson(jsonWriterSettings));
-                        assetJ.Add("id", txid);
+                        //获取有效数据则存储asset
+                        if (resAsset != "null")
+                        {
+                            //var jsonWriterSettings = new JsonWriterSettings { OutputMode = JsonOutputMode.Strict };
+                            //JObject assetJ = JObject.Parse(tx["asset"].ToJson(jsonWriterSettings));
+                            //assetJ.Add("id", txid);
 
-                        MongoInsertOne("asset",assetJ);
+                            MongoInsertOne("asset",JObject.Parse(resAsset));
 
-                        DateTime end = DateTime.Now;
-                        var doTime = (end - start).TotalMilliseconds;
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine("StorageAssetData On Tx " + txid + " in " + doTime + "ms");
-                        //}
+                            DateTime end = DateTime.Now;
+                            var doTime = (end - start).TotalMilliseconds;
+                            Console.ForegroundColor = ConsoleColor.Green;
+                            Console.WriteLine("StorageAssetData in " + doTime + "ms");
+                        }
+                //    }
+                //}
                     }
-                }
-            }
         }
 
         private static void StorageUTXOData()
@@ -327,15 +324,26 @@ namespace NeoBlockMongoStorage
             client = null;
         }
 
-        private static void DoStorageAddressByVoutVin(int blockindex, string VoutVin_addr,string VoutVin_txid)
+        private static DateTime GetBlockTime(int blockindex)
         {
+            //获取block时间（本地时区时区）
             var client = new MongoClient(mongodbConnStr);
             var database = client.GetDatabase(mongodbDatabase);
-            //获取block时间（本地时区时区）
             var collBlock = database.GetCollection<BsonDocument>("block");
             var queryBlock = collBlock.Find("{index:" + blockindex + "}").ToList()[0];
             int blockTimeTS = queryBlock["time"].AsInt32;
             DateTime blockTime = TimeZoneInfo.ConvertTime(new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc), TimeZoneInfo.Local).AddSeconds(blockTimeTS);
+
+            client = null;
+
+            return blockTime;
+        }
+
+        private static void DoStorageAddressByVoutVin(int blockindex, string VoutVin_addr,string VoutVin_txid)
+        {
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+
             //处理address入库
             var collAddr = database.GetCollection<Address>("address");
             var findBson = BsonDocument.Parse("{addr:'" + VoutVin_addr + "'}");
@@ -343,6 +351,8 @@ namespace NeoBlockMongoStorage
             Address addr = new Address();
             if (queryAddr.Count == 0)
             {
+                DateTime blockTime = GetBlockTime(blockindex);
+
                 //插入结构
                 addr = new Address
                 {
@@ -372,8 +382,8 @@ namespace NeoBlockMongoStorage
                     {
                         txid = VoutVin_txid,
                         blockindex = blockindex,
-                        blocktime = blockTime
-                    };
+                        blocktime = GetBlockTime(blockindex)
+                };
                     addr.txcount++;
 
                     collAddr.ReplaceOne(findBson, addr);
@@ -407,6 +417,9 @@ namespace NeoBlockMongoStorage
                         value = (decimal)voutJ["value"]
                     };
 
+                    //尝试入库新的asset
+                    DoAssetStorageByVout((string)voutJ["asset"]);
+
                     //检查是否已有入库,无则入库
                     string findStr = "{{txid:'{0}',n:{1}}}";
                     findStr = string.Format(findStr, utxo.txid, utxo.n);
@@ -417,7 +430,7 @@ namespace NeoBlockMongoStorage
                         collUTXO.InsertOne(utxo);
                     }
 
-                    DoStorageAddressByVoutVin(blockindex, utxo.addr, utxo.txid);
+                    DoStorageAddressByVoutVin(blockindex, utxo.addr, txid);
                 }
             }
 
@@ -444,7 +457,25 @@ namespace NeoBlockMongoStorage
                         }
                     }
 
-                    DoStorageAddressByVoutVin(blockindex, utxo.addr, utxo.txid);
+                    try
+                    {
+                        //查找前序交易vout对应的addr
+                        var _collTx = database.GetCollection<BsonDocument>("tx");
+                        var _queryTx = _collTx.Find(BsonDocument.Parse("{txid:'" + voutTx + "'}")).ToList()[0];
+                        var _voutBA = _queryTx["vout"].AsBsonArray;
+                        string voutAddr = string.Empty;
+                        foreach (BsonValue _bv in _voutBA)
+                        {
+                            if ((int)_bv["n"] == voutN)
+                            {
+                                voutAddr = _bv["address"].AsString;
+                                break;
+                            }
+                        }
+
+                        DoStorageAddressByVoutVin(blockindex, voutAddr, txid);
+                    }
+                    catch { }
                 }
             }
 
