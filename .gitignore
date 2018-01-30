@@ -5,6 +5,7 @@
 
 # Setting files
 appsettings.json
+appsettings_*.json
 
 # User-specific files
 *.suo
