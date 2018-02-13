@@ -339,6 +339,28 @@ namespace NeoBlockMongoStorage
             return blockTime;
         }
 
+        private static void addAddressTx(Address addr)
+        {
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+            var collAddrTx = database.GetCollection<BsonDocument>("address_tx");
+            var findBson = BsonDocument.Parse("{addr:'" + addr.addr + "',txid:'" + addr.lastuse.txid + "'}");
+            var queryAddrTx = collAddrTx.Find(findBson).ToList();
+
+            if (queryAddrTx.Count == 0)
+            {
+                BsonDocument B = new BsonDocument();
+                B.Add("addr", addr.addr);
+                B.Add("txid", addr.lastuse.txid);
+                B.Add("blockindex", addr.lastuse.blockindex);
+                B.Add("blocktime", addr.lastuse.blocktime);
+
+                collAddrTx.InsertOne(B);
+            }
+
+            client = null;
+        }
+
         private static void DoStorageAddressByVoutVin(int blockindex, string VoutVin_addr,string VoutVin_txid)
         {
             var client = new MongoClient(mongodbConnStr);
@@ -373,6 +395,7 @@ namespace NeoBlockMongoStorage
                 };
 
                 collAddr.InsertOne(addr);
+                addAddressTx(addr);//加入地址交易表记录
             }
             else if(queryAddr.Count>0) {
                 //更新结构
@@ -383,10 +406,11 @@ namespace NeoBlockMongoStorage
                         txid = VoutVin_txid,
                         blockindex = blockindex,
                         blocktime = GetBlockTime(blockindex)
-                };
+                    };
                     addr.txcount++;
 
                     collAddr.ReplaceOne(findBson, addr);
+                    addAddressTx(addr);//加入地址交易表记录
                 }
             }
 
