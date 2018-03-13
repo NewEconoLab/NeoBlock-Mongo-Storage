@@ -20,10 +20,13 @@ namespace NeoBlockMongoStorage
         public UTXO(){
             addr = string.Empty;
             txid = string.Empty;
-            n = 0;
+            n = -1;
             asset = string.Empty;
             value = 0;
-            used = string.Empty;
+            createHeight = -1;
+            used = string.Empty; 
+            useHeight = -1;
+            claimed = string.Empty;
         }
 
         public ObjectId _id { get; set; }
@@ -32,6 +35,9 @@ namespace NeoBlockMongoStorage
         public int n { get; set; }
         public string asset { get; set; }
         public decimal value { get; set; }
+        public int createHeight { get; set; }
         public string used { get; set; }
+        public int useHeight { get; set; }
+        public string claimed { get; set; }    
     }
 }

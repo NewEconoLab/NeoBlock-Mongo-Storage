@@ -438,7 +438,8 @@ namespace NeoBlockMongoStorage
                         txid = txid,
                         n = (int)voutJ["n"],
                         asset = (string)voutJ["asset"],
-                        value = (decimal)voutJ["value"]
+                        value = (decimal)voutJ["value"],
+                        createHeight = blockindex
                     };
 
                     //尝试入库新的asset
@@ -477,6 +478,7 @@ namespace NeoBlockMongoStorage
                         if (utxo.used == string.Empty)
                         {
                             utxo.used = txid;
+                            utxo.useHeight = blockindex;
                             collUTXO.ReplaceOne(findB, utxo);
                         }
                     }
@@ -500,6 +502,35 @@ namespace NeoBlockMongoStorage
                         DoStorageAddressByVoutVin(blockindex, voutAddr, txid);
                     }
                     catch { }
+                }
+            }
+
+            if (TxJ["claims"] != null) {
+                //记录GAS领取
+                JArray claimJA = (JArray)TxJ["claims"];
+                
+                if (claimJA.Count > 0)
+                {
+                    foreach (JObject claimJ in claimJA)
+                    {
+                        string voutTx = (string)claimJ["txid"];
+                        int voutN = (int)claimJ["vout"];
+
+                        //查找UTXO创建记录
+                        string findStr = "{{txid:'{0}',n:{1}}}";
+                        findStr = string.Format(findStr, voutTx, voutN);
+                        BsonDocument findB = BsonDocument.Parse(findStr);
+                        UTXO utxo = collUTXO.Find(findB).ToList()[0];
+                        if (utxo != null)
+                        {
+                            //只有不重复才更新
+                            if (utxo.claimed == string.Empty)
+                            {
+                                utxo.claimed = txid;
+                                collUTXO.ReplaceOne(findB, utxo);
+                            }
+                        }
+                    }
                 }
             }
 
