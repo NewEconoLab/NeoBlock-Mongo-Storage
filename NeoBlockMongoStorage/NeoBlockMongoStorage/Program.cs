@@ -14,6 +14,7 @@ using System.Net;
 using System.Text;
 using System.IO;
 using MongoDB.Bson.IO;
+using System.Linq;
 
 namespace NeoBlockMongoStorage
 {
@@ -91,10 +92,30 @@ namespace NeoBlockMongoStorage
                     Thread.Sleep(sleepTime);
                 }
             });
+            Task task_StorageBlockTotalSysfee = new Task(() => {
+
+                Console.WriteLine("异步循环执行StorageBlockTotalSysfee开始");
+                while (true)
+                {
+                    DateTime start = DateTime.Now;
+
+                    //统计处理块总系统费数据
+                    StorageBlockTotalSysfee();
+
+                    //借用utxo睡眠开关
+                    if (utxoIsSleep) { Thread.Sleep(sleepTime); }
+
+                    DateTime end = DateTime.Now;
+                    var doTime = (end - start).TotalMilliseconds;
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("StorageBlockTotalSysfee in " + doTime + "ms");
+                }
+            });
             //启动任务
             task_StorageUTXO.Start();
             task_StorageNotify.Start();
             task_StorageFulllog.Start();
+            task_StorageBlockTotalSysfee.Start();
 
             //主进程(同步)
             while (true)
@@ -244,6 +265,69 @@ namespace NeoBlockMongoStorage
                 //    }
                 //}
                     }
+        }
+
+        private static void StorageBlockTotalSysfee()
+        {
+            var appName = "totalsysfee";
+            var maxBlockindex = GetSystemCounter(appName);
+
+            var storageBlockindex = maxBlockindex + 1;
+            //处理块不能超过已入库的最大块
+            if (storageBlockindex <= GetBlockMaxIndex())
+            {
+                DoStorageBlockTotalSysfeeByBlock(storageBlockindex, appName);
+            }
+        }
+
+        private static void DoStorageBlockTotalSysfeeByBlock(int blockindex,string appName)
+        {
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+            var collection = database.GetCollection<BsonDocument>("block");
+
+            var findBson = BsonDocument.Parse("{index:" + blockindex + "}");
+            var query = collection.Find(findBson).ToList();
+            if (query.Count > 0)
+            {
+                var jsonWriterSettings = new JsonWriterSettings { OutputMode = JsonOutputMode.Strict };
+                JArray txJA = JArray.Parse(query[0]["tx"].AsBsonArray.ToJson(jsonWriterSettings));
+                foreach (JObject j in txJA)
+                {
+                    j.Remove("_id");
+                }
+
+                //linq筛选出系统费非零的交易
+                var linqQuery = from tx in txJA.Children()
+                            where (decimal)tx["sys_fee"] != 0
+                            select (decimal)tx["sys_fee"];
+
+                decimal totalSysfee = 0;
+                //如果块内有交易有系统费，则计算块总系统费
+                if (linqQuery.Count() > 0) {
+                    totalSysfee = linqQuery.Sum();
+                }
+
+                //记录的totalSysfee为当前高度累计总系统费，总是加上截止上一个块的总系统费
+                var collBlockSysfeefind = database.GetCollection<BsonDocument>("block_sysfee");
+                var blockSysfeeFindBson = BsonDocument.Parse("{index:" + (blockindex - 1) + "}");
+                var blockSysfeeQuery = collBlockSysfeefind.Find(blockSysfeeFindBson).ToList();
+                if (blockSysfeeQuery.Count > 0)
+                {
+                    totalSysfee += decimal.Parse(blockSysfeeQuery[0]["totalSysfee"].AsString);
+                }
+                
+                //写入数据
+                var collBlockSysfee = database.GetCollection<BlockSysfee>("block_sysfee");
+                BlockSysfee bsf = new BlockSysfee(blockindex);
+                bsf.totalSysfee = totalSysfee;
+                collBlockSysfee.InsertOne(bsf);
+
+                //更新已处理块高度
+                SetSystemCounter(appName, blockindex);
+            }
+
+            client = null;
         }
 
         private static void StorageUTXOData()
