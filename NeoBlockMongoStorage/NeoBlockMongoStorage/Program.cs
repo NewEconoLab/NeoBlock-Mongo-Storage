@@ -27,6 +27,8 @@ namespace NeoBlockMongoStorage
         static string NeoCliJsonRPCUrl = string.Empty;
         static int sleepTime = 0;
         static bool utxoIsSleep = false;
+        static bool isDoNotify = true;
+        static bool isDoFullLogs = true;
 
         static void Main(string[] args)
         {
@@ -41,6 +43,19 @@ namespace NeoBlockMongoStorage
             sleepTime = int.Parse(config["sleepTime"]);
             if (int.Parse(config["utxoIsSleep"]) == 1) {
                 utxoIsSleep = true;
+            }
+            if (config["isDoNotify"] != null){
+                if (int.Parse(config["isDoNotify"]) != 1)
+                {
+                    isDoNotify = false;
+                }
+            }
+            if (config["isDoFullLogs"] != null)
+            {
+                if (int.Parse(config["isDoFullLogs"]) != 1)
+                {
+                    isDoFullLogs = false;
+                }
             }
 
             Console.WriteLine("NeoBlockMongoStorage Start!");
@@ -113,8 +128,8 @@ namespace NeoBlockMongoStorage
             });
             //启动任务
             task_StorageUTXO.Start();
-            task_StorageNotify.Start();
-            task_StorageFulllog.Start();
+            if (isDoNotify) { task_StorageNotify.Start(); }
+            if (isDoFullLogs) { task_StorageFulllog.Start(); }
             task_StorageBlockTotalSysfee.Start();
 
             //主进程(同步)
