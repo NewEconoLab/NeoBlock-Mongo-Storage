@@ -303,41 +303,55 @@ namespace NeoBlockMongoStorage
 
             var findBson = BsonDocument.Parse("{index:" + blockindex + "}");
             var query = collection.Find(findBson).ToList();
+
+            bool isDone = IsDataExist("block_sysfee", "index", blockindex);
+
             if (query.Count > 0)
             {
-                var jsonWriterSettings = new JsonWriterSettings { OutputMode = JsonOutputMode.Strict };
-                JArray txJA = JArray.Parse(query[0]["tx"].AsBsonArray.ToJson(jsonWriterSettings));
-                foreach (JObject j in txJA)
-                {
-                    j.Remove("_id");
+                //判断块没有处理才处理
+                if (!isDone) {
+                    var jsonWriterSettings = new JsonWriterSettings { OutputMode = JsonOutputMode.Strict };
+                    JArray txJA = JArray.Parse(query[0]["tx"].AsBsonArray.ToJson(jsonWriterSettings));
+                    foreach (JObject j in txJA)
+                    {
+                        j.Remove("_id");
+                    }
+
+                    //linq筛选出系统费非零的交易
+                    var linqQuery = from tx in txJA.Children()
+                                    where (decimal)tx["sys_fee"] != 0
+                                    select (decimal)tx["sys_fee"];
+
+                    decimal totalSysfee = 0;
+                    //如果块内有交易有系统费，则计算块总系统费
+                    if (linqQuery.Count() > 0)
+                    {
+                        totalSysfee = linqQuery.Sum();
+                    }
+
+                    //记录的totalSysfee为当前高度累计总系统费，总是加上截止上一个块的总系统费
+                    var collBlockSysfeefind = database.GetCollection<BsonDocument>("block_sysfee");
+                    var blockSysfeeFindBson = BsonDocument.Parse("{index:" + (blockindex - 1) + "}");
+                    var blockSysfeeQuery = collBlockSysfeefind.Find(blockSysfeeFindBson).ToList();
+                    if (blockSysfeeQuery.Count > 0)
+                    {
+                        totalSysfee += decimal.Parse(blockSysfeeQuery[0]["totalSysfee"].AsString);
+                    }
+
+                    //写入数据
+                    var collBlockSysfee = database.GetCollection<BlockSysfee>("block_sysfee");
+                    BlockSysfee bsf = new BlockSysfee(blockindex);
+                    bsf.totalSysfee = totalSysfee;
+                    try
+                    {
+                        collBlockSysfee.InsertOne(bsf);
+                    }
+                    catch (Exception e)
+                    {
+                        var a = e.Message;
+                    }
                 }
-
-                //linq筛选出系统费非零的交易
-                var linqQuery = from tx in txJA.Children()
-                            where (decimal)tx["sys_fee"] != 0
-                            select (decimal)tx["sys_fee"];
-
-                decimal totalSysfee = 0;
-                //如果块内有交易有系统费，则计算块总系统费
-                if (linqQuery.Count() > 0) {
-                    totalSysfee = linqQuery.Sum();
-                }
-
-                //记录的totalSysfee为当前高度累计总系统费，总是加上截止上一个块的总系统费
-                var collBlockSysfeefind = database.GetCollection<BsonDocument>("block_sysfee");
-                var blockSysfeeFindBson = BsonDocument.Parse("{index:" + (blockindex - 1) + "}");
-                var blockSysfeeQuery = collBlockSysfeefind.Find(blockSysfeeFindBson).ToList();
-                if (blockSysfeeQuery.Count > 0)
-                {
-                    totalSysfee += decimal.Parse(blockSysfeeQuery[0]["totalSysfee"].AsString);
-                }
-                
-                //写入数据
-                var collBlockSysfee = database.GetCollection<BlockSysfee>("block_sysfee");
-                BlockSysfee bsf = new BlockSysfee(blockindex);
-                bsf.totalSysfee = totalSysfee;
-                collBlockSysfee.InsertOne(bsf);
-
+               
                 //更新已处理块高度
                 SetSystemCounter(appName, blockindex);
             }
