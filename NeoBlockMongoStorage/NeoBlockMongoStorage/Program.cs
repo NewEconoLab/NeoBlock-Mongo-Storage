@@ -21,6 +21,7 @@ namespace NeoBlockMongoStorage
     class Program
     {
         static CoreHttpHelper chh = new CoreHttpHelper();
+        static NEP5 nep5 = new NEP5();
 
         static string mongodbConnStr = string.Empty;
         static string mongodbDatabase = string.Empty;
@@ -29,6 +30,7 @@ namespace NeoBlockMongoStorage
         static bool utxoIsSleep = false;
         static bool isDoNotify = true;
         static bool isDoFullLogs = true;
+        static string cliType = "nel"; //neo 原班 ；nel 改版
 
         static void Main(string[] args)
         {
@@ -57,13 +59,17 @@ namespace NeoBlockMongoStorage
                     isDoFullLogs = false;
                 }
             }
-
+            if (config["cliType"] != null)
+            {
+                cliType = config["cliType"];
+            }
             Console.WriteLine("NeoBlockMongoStorage Start!");
             Console.WriteLine("*************************************");
             Console.WriteLine("mongodbConnStr" + mongodbConnStr);
             Console.WriteLine("mongodbDatabase" + mongodbDatabase);
             Console.WriteLine("NeoCliJsonRPCUrl" + NeoCliJsonRPCUrl);
             Console.WriteLine("sleepTime" + sleepTime);
+            Console.WriteLine("cliType " + cliType);
             Console.WriteLine("*************************************");
 
             Console.WriteLine("Block MaxIndex in DB:" + GetBlockMaxIndex());
@@ -410,6 +416,23 @@ namespace NeoBlockMongoStorage
                             isShow = false;
                             //cc = ConsoleColor.Yellow;
                             break;
+                        case "notify":                         
+                            //只有合约调用交易才处理notify，加快速度
+                            try
+                            {
+                                if ((string)Tx["type"] == "InvocationTransaction")
+                                {
+                                    DoStorageNotifyByTx(blockindex, Tx);
+                                    Thread.Sleep(sleepTime);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.ForegroundColor = ConsoleColor.Cyan;
+                                Console.WriteLine("notify：" + ex.Message);
+                            }
+                            cc = ConsoleColor.Cyan;
+                            break;
                         case "fulllog":
                             DoStorageFulllogByTx(Tx);
                             cc = ConsoleColor.Magenta;
@@ -650,6 +673,66 @@ namespace NeoBlockMongoStorage
             client = null;   
         }
 
+        private static void DoStorageNotifyByTx(int blockindex,JObject TxJ) {
+            //获取数据库Tx数据
+            string doTxid = (string)TxJ["txid"];
+
+            JObject postData = new JObject();
+            postData.Add("jsonrpc", "2.0");
+            postData.Add("method", "getapplicationlog");
+            postData.Add("params", new JArray() { doTxid });
+            postData.Add("id", 1);
+            string postDataStr = Newtonsoft.Json.JsonConvert.SerializeObject(postData);
+            //获取Cli Notify数据
+            string resNotify = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8);
+            JObject resJ = new JObject();
+            try
+            {
+                resJ = JObject.Parse(resNotify);
+            }
+            catch
+            {
+                //待加入异常记录
+                return;
+            }
+            if (resJ["result"] != null)
+            {
+                resNotify = JObject.Parse(resNotify)["result"].ToString();
+            }
+            else { resNotify = null; }
+            if (resNotify != null)
+            {
+                if (!IsDataExist("notify", "txid", doTxid))
+                {
+                    JObject resNotifyJ = JObject.Parse(resNotify);
+                    resNotifyJ.Add("blockindex", blockindex);
+                    MongoInsertOne("notify", resNotifyJ);
+
+                    ////测试nep5
+                    //if (resNotifyJ["notifications"] != null)
+                    //{
+                    //    JArray notificationsJA = (JArray)resNotifyJ["notifications"];
+                    //    if (notificationsJA.Count > 0)
+                    //    {
+                    //        int i = 0;
+                    //        foreach (JObject notificationJ in notificationsJA)
+                    //        {
+                    //            if (nep5.checkTransfer(notificationJ))
+                    //            {
+                    //                NEP5.Transfer tf = new NEP5.Transfer(doTxid, i, notificationJ, 8);
+                    //            }
+
+                    //            i++;
+                    //        }
+
+                    //    }
+
+                    //}
+
+                }
+            }
+        }
+
         private static void DoStorageFulllogByTx(JObject TxJ)
         {
             //获取数据库Tx数据
@@ -661,7 +744,7 @@ namespace NeoBlockMongoStorage
             postData.Add("params", new JArray() { doTxid });
             postData.Add("id", 1);
             string postDataStr = Newtonsoft.Json.JsonConvert.SerializeObject(postData);
-            //获取Cli Notify数据
+            //获取Cli FullLogs数据
             string resFulllog = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8);
             JObject resJ = new JObject();
             try {
@@ -752,12 +835,26 @@ namespace NeoBlockMongoStorage
 
         private static void StorageNotifyData()
         {
-            var maxBlockindex = GetSystemCounter("notify");
-            //检查当前已有区块是否已处理所有交易notify
-            DoStorageNotify(maxBlockindex);
+            //适配nel改版cli
+            if (cliType == "nel") {
+                var maxBlockindex = GetSystemCounter("notify");
+                //检查当前已有区块是否已处理所有交易notify
+                DoStorageNotify(maxBlockindex);
 
-            var storageBlockindex = maxBlockindex + 1;
-            DoStorageNotify(storageBlockindex);
+                var storageBlockindex = maxBlockindex + 1;
+                DoStorageNotify(storageBlockindex);
+            }
+
+            //适配原版cli
+            if (cliType == "neo") {
+                var appName = "notify";
+                var maxBlockindex = GetSystemCounter(appName);
+                //检查当前已有区块是否已处理所有交易utxo
+                DoStorageByEveryTxInBlock(maxBlockindex, appName);
+
+                var storageBlockindex = maxBlockindex + 1;
+                DoStorageByEveryTxInBlock(storageBlockindex, appName);
+            }
         }
 
         private static void DoStorageNotify(int doBlockIndex)
