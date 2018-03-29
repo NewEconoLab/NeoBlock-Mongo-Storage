@@ -103,6 +103,17 @@ namespace NeoBlockMongoStorage
                     Thread.Sleep(sleepTime);
                 }
             });
+            Task task_StorageNEP5 = new Task(() => {
+                Console.WriteLine("异步循环执行StorageNEP5Data开始");
+                while (true)
+                {
+                    //处理NEP5数据
+                    StorageNEP5Data();
+
+                    //借用utxo睡眠开关
+                    if (utxoIsSleep) { Thread.Sleep(sleepTime); }
+                }
+            });
             Task task_StorageFulllog = new Task(() => {
                 Console.WriteLine("异步循环执行StorageFulllogData开始");
                 while (true)
@@ -135,6 +146,7 @@ namespace NeoBlockMongoStorage
             //启动任务
             task_StorageUTXO.Start();
             if (isDoNotify) { task_StorageNotify.Start(); }
+            task_StorageNEP5.Start();
             if (isDoFullLogs) { task_StorageFulllog.Start(); }
             task_StorageBlockTotalSysfee.Start();
 
@@ -433,6 +445,23 @@ namespace NeoBlockMongoStorage
                             }
                             cc = ConsoleColor.Cyan;
                             break;
+                        case "NEP5":
+                            //只有合约调用交易才处理NEP5，加快速度
+                            try
+                            {
+                                if ((string)Tx["type"] == "InvocationTransaction")
+                                {
+                                    DoStorageNEP5ByTx(blockindex, Tx);
+                                    //Thread.Sleep(sleepTime);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.ForegroundColor = ConsoleColor.Cyan;
+                                Console.WriteLine("NEP5：" + ex.Message);
+                            }
+                            cc = ConsoleColor.Cyan;
+                            break;
                         case "fulllog":
                             DoStorageFulllogByTx(Tx);
                             cc = ConsoleColor.Magenta;
@@ -707,30 +736,63 @@ namespace NeoBlockMongoStorage
                     JObject resNotifyJ = JObject.Parse(resNotify);
                     resNotifyJ.Add("blockindex", blockindex);
                     MongoInsertOne("notify", resNotifyJ);
-
-                    ////测试nep5
-                    //if (resNotifyJ["notifications"] != null)
-                    //{
-                    //    JArray notificationsJA = (JArray)resNotifyJ["notifications"];
-                    //    if (notificationsJA.Count > 0)
-                    //    {
-                    //        int i = 0;
-                    //        foreach (JObject notificationJ in notificationsJA)
-                    //        {
-                    //            if (nep5.checkTransfer(notificationJ))
-                    //            {
-                    //                NEP5.Transfer tf = new NEP5.Transfer(doTxid, i, notificationJ, 8);
-                    //            }
-
-                    //            i++;
-                    //        }
-
-                    //    }
-
-                    //}
-
                 }
             }
+        }
+
+        private static void DoStorageNEP5ByTx(int blockindex, JObject TxJ)
+        {
+            //获取数据库Tx数据
+            string doTxid = (string)TxJ["txid"];
+
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+            var collNotify = database.GetCollection<BsonDocument>("notify");
+
+            var findBson = BsonDocument.Parse("{txid:'" + doTxid + "'}");
+            var query = collNotify.Find(findBson).ToList();
+
+            if (query.Count > 0)
+            {
+                var jsonWriterSettings = new JsonWriterSettings { OutputMode = JsonOutputMode.Strict };
+                JObject notifyJ = JObject.Parse(query[0].ToJson(jsonWriterSettings));
+
+                //测试nep5
+                if (notifyJ["notifications"] != null)
+                {
+                    JArray notificationsJA = (JArray)notifyJ["notifications"];
+                    if (notificationsJA.Count > 0)
+                    {
+                        int n = 0;
+                        foreach (JObject notificationJ in notificationsJA)
+                        {
+                            if (nep5.checkTransfer(notificationJ))
+                            {
+                                //获取nep5资产信息测试
+                                string nep5AssetID = (string)notificationJ["contract"];
+                                var a = neoContractHelper.getNEP5ContractInfo("https://api.nel.group/api/mainnet", nep5AssetID, "name");
+
+                                var collNEP5TransferBson = database.GetCollection<BsonDocument>("NEP5transfer");
+                                var findBsonNEP5TransferBson = BsonDocument.Parse("{txid:'" + doTxid + "',n:" + n + "}");
+                                var queryNEP5TransferBson = collNEP5TransferBson.Find(findBsonNEP5TransferBson).ToList();
+
+                                if (queryNEP5TransferBson.Count == 0)//不重复才存
+                                {
+                                    NEP5.Transfer tf = new NEP5.Transfer(blockindex, doTxid, n, notificationJ, 8);
+
+                                    var collNEP5Transfer = database.GetCollection<NEP5.Transfer>("NEP5transfer");
+                                    collNEP5Transfer.InsertOne(tf);
+                                }
+                            }
+
+                            n++;
+                        }
+
+                    }
+                }
+            }
+
+            client = null;
         }
 
         private static void DoStorageFulllogByTx(JObject TxJ)
@@ -855,6 +917,17 @@ namespace NeoBlockMongoStorage
                 var storageBlockindex = maxBlockindex + 1;
                 DoStorageByEveryTxInBlock(storageBlockindex, appName);
             }
+        }
+
+        private static void StorageNEP5Data()
+        {
+            var appName = "NEP5";
+            var maxBlockindex = GetSystemCounter(appName);
+            //检查当前已有区块是否已处理所有交易utxo
+            DoStorageByEveryTxInBlock(maxBlockindex, appName);
+
+            var storageBlockindex = maxBlockindex + 1;
+            DoStorageByEveryTxInBlock(storageBlockindex, appName);
         }
 
         private static void DoStorageNotify(int doBlockIndex)
