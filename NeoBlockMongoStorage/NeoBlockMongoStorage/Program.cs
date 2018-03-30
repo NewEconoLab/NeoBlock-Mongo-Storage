@@ -30,7 +30,7 @@ namespace NeoBlockMongoStorage
         static bool utxoIsSleep = false;
         static bool isDoNotify = true;
         static bool isDoFullLogs = true;
-        static string cliType = "nel"; //neo 原班 ；nel 改版
+        static string cliType = "neo"; //neo 原版 ；nel 改版
 
         static void Main(string[] args)
         {
@@ -956,7 +956,10 @@ namespace NeoBlockMongoStorage
             DoStorageByEveryTxInBlock(maxBlockindex, appName);
 
             var storageBlockindex = maxBlockindex + 1;
-            DoStorageByEveryTxInBlock(storageBlockindex, appName);
+            if (storageBlockindex <= GetSystemCounter("notify"))//nep5处理高度不能超过notify高度
+            {              
+                DoStorageByEveryTxInBlock(storageBlockindex, appName);
+            }
         }
 
         private static void DoStorageNotify(int doBlockIndex)
