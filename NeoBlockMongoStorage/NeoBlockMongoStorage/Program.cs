@@ -770,7 +770,33 @@ namespace NeoBlockMongoStorage
                             {
                                 //获取nep5资产信息测试
                                 string nep5AssetID = (string)notificationJ["contract"];
-                                var a = neoContractHelper.getNEP5ContractInfo("https://api.nel.group/api/mainnet", nep5AssetID, "name");
+
+                                var collNEP5AssetBson = database.GetCollection<BsonDocument>("NEP5asset");
+                                var findBsonNEP5AssetBson = BsonDocument.Parse("{assetid:'" + nep5AssetID + "'}");
+                                var queryNEP5AssetBson = collNEP5AssetBson.Find(findBsonNEP5AssetBson).ToList();
+
+                                int NEP5decimals = 0;//NEP5资产精度，后面处理资产value有用
+                                if (queryNEP5AssetBson.Count == 0)//不重复才存
+                                {
+                                    NEP5.Asset asset = new NEP5.Asset(mongodbDatabase, nep5AssetID);
+
+                                    try
+                                    {
+                                        var collNEP5Asset = database.GetCollection<NEP5.Asset>("NEP5asset");
+                                        collNEP5Asset.InsertOne(asset);
+
+                                    }
+                                    catch(Exception ex)
+                                    {
+                                        var a = ex.Message;
+                                    }
+
+                                    NEP5decimals = asset.decimals;
+                                }
+                                else
+                                {
+                                    NEP5decimals = queryNEP5AssetBson[0]["decimals"].ToInt32();
+                                }
 
                                 var collNEP5TransferBson = database.GetCollection<BsonDocument>("NEP5transfer");
                                 var findBsonNEP5TransferBson = BsonDocument.Parse("{txid:'" + doTxid + "',n:" + n + "}");
@@ -778,7 +804,7 @@ namespace NeoBlockMongoStorage
 
                                 if (queryNEP5TransferBson.Count == 0)//不重复才存
                                 {
-                                    NEP5.Transfer tf = new NEP5.Transfer(blockindex, doTxid, n, notificationJ, 8);
+                                    NEP5.Transfer tf = new NEP5.Transfer(blockindex, doTxid, n, notificationJ, NEP5decimals);
 
                                     var collNEP5Transfer = database.GetCollection<NEP5.Transfer>("NEP5transfer");
                                     collNEP5Transfer.InsertOne(tf);

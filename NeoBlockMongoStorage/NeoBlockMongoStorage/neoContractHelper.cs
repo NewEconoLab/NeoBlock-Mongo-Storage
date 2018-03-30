@@ -11,8 +11,18 @@ namespace NeoBlockMongoStorage
     {
         static CoreHttpHelper chh = new CoreHttpHelper();
 
-        public static string getNEP5ContractInfo(string apiUrl,string scripthash, string key)
+        public static string getNEP5ContractInfo(string netType,string scripthash, string key)
         {
+            string apiUrl = string.Empty;
+            if (netType == "NeoBlockData_mainnet")
+            {
+                apiUrl = "https://api.nel.group/api/mainnet";
+            }
+            else
+            {
+                apiUrl = "https://api.nel.group/api/testnet";
+            }
+
             string result = string.Empty;
             try
             {
@@ -26,7 +36,7 @@ namespace NeoBlockMongoStorage
                 string resNotify = chh.Post(apiUrl, postDataStr, Encoding.UTF8);
                 string valueHex = (string)JObject.Parse(resNotify)["result"][0]["stack"][0]["value"];
 
-                result = getStrFromHexstr(valueHex);
+                result = valueHex;
             }
             catch (Exception ex)
             {

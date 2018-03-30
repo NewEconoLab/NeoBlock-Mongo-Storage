@@ -22,6 +22,38 @@ namespace NeoBlockMongoStorage
         }
 
         [BsonIgnoreExtraElements]
+        public class Asset {
+            public Asset(string netType,string Assetid){
+                assetid = Assetid;
+                try
+                {
+                    string decimalsHex = neoContractHelper.getNEP5ContractInfo(netType, assetid.Replace("0x", ""), "decimals");
+                    decimals = int.Parse(decimalsHex);
+
+                    string totalSupplyHex = neoContractHelper.getNEP5ContractInfo(netType, assetid.Replace("0x", ""), "totalSupply");
+                    totalsupply = getNumFromByteArray(totalSupplyHex, decimals);
+
+                    string nameHex = neoContractHelper.getNEP5ContractInfo(netType, assetid.Replace("0x", ""), "name");
+                    name = neoContractHelper.getStrFromHexstr(nameHex);
+
+                    string symbolHex = neoContractHelper.getNEP5ContractInfo(netType, assetid.Replace("0x", ""), "symbol");
+                    symbol = neoContractHelper.getStrFromHexstr(symbolHex);
+                }
+                catch(Exception ex)
+                {
+                    var a = ex.Message;
+                }
+            }
+
+            public ObjectId _id { get; set; }
+            public string assetid { get; set; }
+            public decimal totalsupply { get; set; }
+            public string name { get; set; }
+            public string symbol { get; set; }
+            public int decimals { get; set; }
+        }
+
+        [BsonIgnoreExtraElements]
         public class Transfer {
             public Transfer(int Blockindex,string Txid,int N,JObject notification,int decimals)
             {
