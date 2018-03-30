@@ -28,7 +28,14 @@ namespace NeoBlockMongoStorage
                 try
                 {
                     string decimalsHex = neoContractHelper.getNEP5ContractInfo(netType, assetid.Replace("0x", ""), "decimals");
-                    decimals = int.Parse(decimalsHex);
+                    if (decimalsHex == string.Empty)
+                    {
+                        decimals = 0;
+                    }
+                    else
+                    {
+                        decimals = int.Parse(decimalsHex);
+                    }                   
 
                     string totalSupplyHex = neoContractHelper.getNEP5ContractInfo(netType, assetid.Replace("0x", ""), "totalSupply");
                     totalsupply = getNumFromByteArray(totalSupplyHex, decimals);

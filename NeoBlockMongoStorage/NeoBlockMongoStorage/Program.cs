@@ -705,7 +705,9 @@ namespace NeoBlockMongoStorage
         private static void DoStorageNotifyByTx(int blockindex,JObject TxJ) {
             //获取数据库Tx数据
             string doTxid = (string)TxJ["txid"];
-
+            string resNotify = string.Empty;
+            JObject resJ = new JObject();
+            
             JObject postData = new JObject();
             postData.Add("jsonrpc", "2.0");
             postData.Add("method", "getapplicationlog");
@@ -713,14 +715,15 @@ namespace NeoBlockMongoStorage
             postData.Add("id", 1);
             string postDataStr = Newtonsoft.Json.JsonConvert.SerializeObject(postData);
             //获取Cli Notify数据
-            string resNotify = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8);
-            JObject resJ = new JObject();
+            resNotify = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8);
+            resJ = new JObject();
             try
             {
                 resJ = JObject.Parse(resNotify);
             }
-            catch
+            catch(Exception ex)
             {
+                var e = ex.Message;
                 //待加入异常记录
                 return;
             }
