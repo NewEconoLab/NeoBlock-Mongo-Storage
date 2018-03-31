@@ -150,10 +150,44 @@ namespace NeoBlockMongoStorage
             string numStr = bi.ToString();
             if (remainder != 0)//如果余数不为零才添加小数点
             {
-                numStr = string.Format("{0}.{1}", bi, remainder);
+                //按照精度，处理小数部分左侧补零与右侧去零
+                int AddLeftZeoCount = decimals - remainder.ToString().Length;
+                string remainderStr = cloneStr("0", AddLeftZeoCount) + removeRightZero(remainder);
+
+                numStr = string.Format("{0}.{1}", bi, remainderStr);
             }
 
             return numStr;
-        } 
+        }
+
+        //生成左侧补零字符串
+        private static string cloneStr(string str, int cloneCount)
+        {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 1; i <= cloneCount; i++)
+            {
+                sb.Append(str);
+            }
+            return sb.ToString();
+        }
+
+        //去除大整数小数（余数）部分的右侧0
+        private static BigInteger removeRightZero(BigInteger bi)
+        {
+            string strReverse0 = strReverse(bi.ToString());
+            BigInteger bi0 = BigInteger.Parse(strReverse0);
+            string strReverse1 = strReverse(bi0.ToString());
+
+            return BigInteger.Parse(strReverse1);
+        }
+
+        //反转字符串
+        private static string strReverse(string str)
+        {
+            char[] arr = str.ToCharArray();
+            Array.Reverse(arr);
+
+            return new string(arr);
+        }
     }
 }
