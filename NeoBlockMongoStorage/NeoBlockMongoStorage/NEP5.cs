@@ -39,12 +39,12 @@ namespace NeoBlockMongoStorage
                 try
                 {
                     string totalSupplyHex = neoContractHelper.getNEP5ContractInfo(netType, assetid.Replace("0x", ""), "totalSupply");
-                    totalsupply = getNumFromByteArray(totalSupplyHex, decimals);
+                    totalsupply = getNumStrFromHexStr(totalSupplyHex, decimals);
                 }
                 catch(Exception ex)
                 {
                     var e = ex.Message;
-                    totalsupply = 0;
+                    totalsupply = "0";
                 }
 
                 try
@@ -63,7 +63,7 @@ namespace NeoBlockMongoStorage
 
             public ObjectId _id { get; set; }
             public string assetid { get; set; }
-            public decimal totalsupply { get; set; }
+            public string totalsupply { get; set; }
             public string name { get; set; }
             public string symbol { get; set; }
             public int decimals { get; set; }
@@ -87,11 +87,11 @@ namespace NeoBlockMongoStorage
                 string valueString = (string)JA[3]["value"];
                 if (valueType == "ByteArray")//标准nep5
                 {
-                    value = getNumFromByteArray(valueString, decimals);
+                    value = decimal.Parse(getNumStrFromHexStr(valueString, decimals));
                 }
                 else if (valueType == "Integer")//变种nep5
                 {
-                    value = getNumFromInteger(valueString, decimals);
+                    value = decimal.Parse(getNumStrFromIntStr(valueString, decimals));
                 }
                 else//未知情况用-1表示
                 {
@@ -120,23 +120,40 @@ namespace NeoBlockMongoStorage
             else
             { return string.Empty; } //ICO mintToken 等情况    
         }
-
-        private static decimal getNumFromByteArray(string byteArray, int decimals)
+        
+        //十六进制转数值（考虑精度调整）
+        private static string getNumStrFromHexStr(string hexStr, int decimals)
         {
-            byte[] bytes = ThinNeo.Helper.HexString2Bytes(byteArray).Reverse().ToArray();
+            //小头换大头
+            byte[] bytes = ThinNeo.Helper.HexString2Bytes(hexStr).Reverse().ToArray();
             string hex = ThinNeo.Helper.Bytes2HexString(bytes);
-            decimal num = Convert.ToUInt64(hex, 16);
-            num = num / (decimal)Math.Pow(10,decimals); //根据精度调整小数点
+            //大整数处理，默认第一位为符号位，0代表正数，需要补位
+            hex = "0" + hex;
 
-            return num;
+            BigInteger bi = BigInteger.Parse(hex, System.Globalization.NumberStyles.AllowHexSpecifier);
+
+            return changeDecimals(bi, decimals);
         }
 
-        private static decimal getNumFromInteger(string Integer, int decimals)
+        //大整数文本转数值（考虑精度调整）
+        private static string getNumStrFromIntStr(string intStr, int decimals)
         {
-            decimal num = decimal.Parse(Integer);
-            num = num / (decimal)Math.Pow(10, decimals); //根据精度调整小数点
+            BigInteger bi = BigInteger.Parse(intStr);
 
-            return num;
+            return changeDecimals(bi,decimals);
         }
+
+        //根据精度处理小数点（大整数模式处理）
+        private static string changeDecimals(BigInteger value,int decimals)
+        {         
+            BigInteger bi = BigInteger.DivRem(value, BigInteger.Pow(10, decimals), out BigInteger remainder);
+            string numStr = bi.ToString();
+            if (remainder != 0)//如果余数不为零才添加小数点
+            {
+                numStr = string.Format("{0}.{1}", bi, remainder);
+            }
+
+            return numStr;
+        } 
     }
 }
