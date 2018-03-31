@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using System.Linq;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
+using System.Numerics;
 
 namespace NeoBlockMongoStorage
 {
@@ -25,21 +26,29 @@ namespace NeoBlockMongoStorage
         public class Asset {
             public Asset(string netType,string Assetid){
                 assetid = Assetid;
+
                 try
                 {
                     string decimalsHex = neoContractHelper.getNEP5ContractInfo(netType, assetid.Replace("0x", ""), "decimals");
-                    if (decimalsHex == string.Empty)
-                    {
-                        decimals = 0;
-                    }
-                    else
-                    {
-                        decimals = int.Parse(decimalsHex);
-                    }                   
+                    decimals = int.Parse(decimalsHex);
+                }
+                catch {
+                    decimals = 0;
+                }
 
+                try
+                {
                     string totalSupplyHex = neoContractHelper.getNEP5ContractInfo(netType, assetid.Replace("0x", ""), "totalSupply");
                     totalsupply = getNumFromByteArray(totalSupplyHex, decimals);
+                }
+                catch(Exception ex)
+                {
+                    var e = ex.Message;
+                    totalsupply = 0;
+                }
 
+                try
+                {
                     string nameHex = neoContractHelper.getNEP5ContractInfo(netType, assetid.Replace("0x", ""), "name");
                     name = neoContractHelper.getStrFromHexstr(nameHex);
 
@@ -116,7 +125,7 @@ namespace NeoBlockMongoStorage
         {
             byte[] bytes = ThinNeo.Helper.HexString2Bytes(byteArray).Reverse().ToArray();
             string hex = ThinNeo.Helper.Bytes2HexString(bytes);
-            decimal num = Convert.ToInt64(hex, 16);
+            decimal num = Convert.ToUInt64(hex, 16);
             num = num / (decimal)Math.Pow(10,decimals); //根据精度调整小数点
 
             return num;
