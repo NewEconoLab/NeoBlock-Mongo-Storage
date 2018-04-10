@@ -529,7 +529,7 @@ namespace NeoBlockMongoStorage
             client = null;
         }
 
-        private static void DoStorageAddressByVoutVin(int blockindex, string VoutVin_addr,string VoutVin_txid)
+        private static void DoStorageAddressByVoutVin(int blockindex, string VoutVin_addr,string VoutVin_txid,string assetID)
         {
             var client = new MongoClient(mongodbConnStr);
             var database = client.GetDatabase(mongodbDatabase);
@@ -561,6 +561,12 @@ namespace NeoBlockMongoStorage
                     },
                     txcount = 1
                 };
+                //增加UTXO资产余额信息
+                var abNew = new assetBalance(mongodbConnStr, mongodbDatabase, VoutVin_addr, assetID);
+                if (abNew.balance != "0")
+                {
+                    addr.balanceOfUTXO.Add(abNew);
+                }
 
                 collAddr.InsertOne(addr);
                 addAddressTx(addr);//加入地址交易表记录
@@ -576,7 +582,24 @@ namespace NeoBlockMongoStorage
                         blocktime = GetBlockTime(blockindex)
                     };
                     addr.txcount++;
-
+                    //增加或更新UTXO资产余额信息
+                    if (addr.balanceOfUTXO.Count > 0) {
+                        List<assetBalance> temp = new List<assetBalance>();
+                        foreach (assetBalance ab in addr.balanceOfUTXO)//如果已有相关资产余额信息则先删除
+                        {
+                            if (ab.assetid != assetID)
+                            {
+                                temp.Add(ab);
+                            }
+                        }
+                        addr.balanceOfUTXO = temp;
+                    }
+                    var abNew = new assetBalance(mongodbConnStr, mongodbDatabase, VoutVin_addr, assetID);
+                    if (abNew.balance != "0")
+                    {
+                        addr.balanceOfUTXO.Add(abNew);
+                    }
+                    
                     collAddr.ReplaceOne(findBson, addr);
                     addAddressTx(addr);//加入地址交易表记录
                 }
@@ -623,7 +646,7 @@ namespace NeoBlockMongoStorage
                         collUTXO.InsertOne(utxo);
                     }
 
-                    DoStorageAddressByVoutVin(blockindex, utxo.addr, txid);
+                    DoStorageAddressByVoutVin(blockindex, utxo.addr, txid ,utxo.asset);
                 }
             }
 
@@ -667,7 +690,7 @@ namespace NeoBlockMongoStorage
                             }
                         }
 
-                        DoStorageAddressByVoutVin(blockindex, voutAddr, txid);
+                        DoStorageAddressByVoutVin(blockindex, voutAddr, txid, utxo.asset);
                     }
                     catch { }
                 }
