@@ -561,12 +561,12 @@ namespace NeoBlockMongoStorage
                     },
                     txcount = 1
                 };
-                //增加UTXO资产余额信息
-                var abNew = new assetBalance(mongodbConnStr, mongodbDatabase, VoutVin_addr, assetID);
-                if (abNew.balance != "0")
-                {
-                    addr.balanceOfUTXO.Add(abNew);
-                }
+                ////增加UTXO资产余额信息
+                //var abNew = new assetBalance(mongodbConnStr, mongodbDatabase, VoutVin_addr, assetID);
+                //if (abNew.balance != "0")
+                //{
+                //    addr.balanceOfUTXO.Add(abNew);
+                //}
 
                 collAddr.InsertOne(addr);
                 addAddressTx(addr);//加入地址交易表记录
@@ -582,23 +582,24 @@ namespace NeoBlockMongoStorage
                         blocktime = GetBlockTime(blockindex)
                     };
                     addr.txcount++;
-                    //增加或更新UTXO资产余额信息
-                    if (addr.balanceOfUTXO.Count > 0) {
-                        List<assetBalance> temp = new List<assetBalance>();
-                        foreach (assetBalance ab in addr.balanceOfUTXO)//如果已有相关资产余额信息则先删除
-                        {
-                            if (ab.assetid != assetID)
-                            {
-                                temp.Add(ab);
-                            }
-                        }
-                        addr.balanceOfUTXO = temp;
-                    }
-                    var abNew = new assetBalance(mongodbConnStr, mongodbDatabase, VoutVin_addr, assetID);
-                    if (abNew.balance != "0")
-                    {
-                        addr.balanceOfUTXO.Add(abNew);
-                    }
+
+                    ////增加或更新UTXO资产余额信息
+                    //if (addr.balanceOfUTXO.Count > 0) {
+                    //    List<assetBalance> temp = new List<assetBalance>();
+                    //    foreach (assetBalance ab in addr.balanceOfUTXO)//如果已有相关资产余额信息则先删除
+                    //    {
+                    //        if (ab.assetid != assetID)
+                    //        {
+                    //            temp.Add(ab);
+                    //        }
+                    //    }
+                    //    addr.balanceOfUTXO = temp;
+                    //}
+                    //var abNew = new assetBalance(mongodbConnStr, mongodbDatabase, VoutVin_addr, assetID);
+                    //if (abNew.balance != "0")
+                    //{
+                    //    addr.balanceOfUTXO.Add(abNew);
+                    //}
                     
                     collAddr.ReplaceOne(findBson, addr);
                     addAddressTx(addr);//加入地址交易表记录
