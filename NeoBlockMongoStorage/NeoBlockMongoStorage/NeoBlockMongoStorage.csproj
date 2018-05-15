@@ -6,23 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="JsonRpc.CoreCLR.Client" Version="1.0.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="2.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="2.0.0" />
     <PackageReference Include="MongoDB.Driver" Version="2.5.0" />
     <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="llvm">
-      <HintPath>..\..\..\neo-thinsdk-cs\thinSDK\bin\Debug\netcoreapp2.0\llvm.dll</HintPath>
-    </Reference>
-    <Reference Include="thinSDK">
-      <HintPath>..\..\..\neo-thinsdk-cs\thinSDK\bin\Debug\netcoreapp2.0\thinSDK.dll</HintPath>
-    </Reference>
-    <Reference Include="thinSDK_neo">
-      <HintPath>..\..\..\neo-thinsdk-cs\thinSDK\bin\Debug\netcoreapp2.0\thinSDK_neo.dll</HintPath>
-    </Reference>
   </ItemGroup>
 
   <ItemGroup>

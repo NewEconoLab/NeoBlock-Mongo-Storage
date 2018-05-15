@@ -3,7 +3,6 @@ using MongoDB;
 using MongoDB.Driver;
 using MongoDB.Bson;
 using System.Threading.Tasks;
-using JsonRpc.CoreCLR.Client;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Timers;
@@ -211,7 +210,7 @@ namespace NeoBlockMongoStorage
                 });
 
             //获取有效数据则存储Mongodb
-            if (resBlock != "null")
+            if (resBlock != string.Empty)
             {
                 //只处理没有存储过的
                 if (!IsDataExist("block", "index", doIndex))
@@ -285,7 +284,7 @@ namespace NeoBlockMongoStorage
                         Thread.Sleep(sleepTime);
 
                         //获取有效数据则存储asset
-                        if (resAsset != "null")
+                        if (resAsset != string.Empty)
                         {
                             //var jsonWriterSettings = new JsonWriterSettings { OutputMode = JsonOutputMode.Strict };
                             //JObject assetJ = JObject.Parse(tx["asset"].ToJson(jsonWriterSettings));
@@ -1328,14 +1327,43 @@ namespace NeoBlockMongoStorage
 
         private static string GetNeoCliData(string method, object[] paras)
         {
-            Uri rpcEndpoint = new Uri(NeoCliJsonRPCUrl);
-            JsonRpcWebClient rpc = new JsonRpcWebClient(rpcEndpoint);
+            string result = string.Empty;
 
-            var response = rpc.InvokeAsync<JObject>(method, paras);
-            JObject resJ = JObject.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(response.Result));
-            var resStr = Newtonsoft.Json.JsonConvert.SerializeObject(resJ["result"]);
+            JObject postData = new JObject();
+            postData.Add("jsonrpc", "2.0");
+            postData.Add("method", method);
+            postData.Add("params", new JArray() { paras });
+            postData.Add("id", 1);
+            string postDataStr = Newtonsoft.Json.JsonConvert.SerializeObject(postData);
 
-            return resStr;
+            //获取Cli Notify数据
+            string resp = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8);
+
+            JObject resJ = new JObject();
+            try
+            {
+                resJ = JObject.Parse(resp);
+            }
+            catch (Exception ex)
+            {
+                var e = ex.Message;
+            }
+
+            if (resJ["result"] != null)
+            {
+                result = resJ["result"].ToString();
+            }
+
+            return result;
+
+            //Uri rpcEndpoint = new Uri(NeoCliJsonRPCUrl);
+            //JsonRpcWebClient rpc = new JsonRpcWebClient(rpcEndpoint);
+
+            //var response = rpc.InvokeAsync<JObject>(method, paras);
+            //JObject resJ = JObject.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(response.Result));
+            //var resStr = Newtonsoft.Json.JsonConvert.SerializeObject(resJ["result"]);
+
+            //return resStr;
         }
 
         private static void MongoInsertOne(string collName, JObject J,bool isAsyn = false)
