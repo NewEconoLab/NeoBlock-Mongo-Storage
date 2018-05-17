@@ -99,10 +99,13 @@ namespace NeoBlockMongoStorage
                     //处理notify数据
                     StorageNotifyData();
 
-                    if (cliType == "nel")//适配nel改版cli时Notify才睡眠，加快neo原版cli入库
-                    {
-                        Thread.Sleep(sleepTime);
-                    }                       
+                    //借用utxo睡眠开关
+                    if (utxoIsSleep) { Thread.Sleep(sleepTime); }
+
+                    //if (cliType == "nel")//适配nel改版cli时Notify才睡眠，加快neo原版cli入库
+                    //{
+                    //    Thread.Sleep(sleepTime);
+                    //}                       
                 }
             });
             Task task_StorageNEP5 = new Task(() => {
