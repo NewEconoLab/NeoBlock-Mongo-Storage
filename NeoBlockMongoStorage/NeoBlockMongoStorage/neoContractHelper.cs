@@ -33,7 +33,9 @@ namespace NeoBlockMongoStorage
                 postData.Add("id", 1);
                 string postDataStr = Newtonsoft.Json.JsonConvert.SerializeObject(postData);
 
-                string resNotify = chh.Post(apiUrl, postDataStr, Encoding.UTF8);
+                //json格式post
+                string resNotify = chh.Post(apiUrl, postDataStr, Encoding.UTF8,1);
+
                 string valueHex = (string)JObject.Parse(resNotify)["result"][0]["stack"][0]["value"];
 
                 result = valueHex;

@@ -25,7 +25,7 @@ namespace NeoBlockMongoStorage
         [BsonIgnoreExtraElements]
         public class Asset {
             public Asset(string netType,string Assetid){
-                assetid = Assetid;
+               assetid = Assetid;
 
                 try
                 {

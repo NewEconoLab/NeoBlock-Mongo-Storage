@@ -744,7 +744,7 @@ namespace NeoBlockMongoStorage
             postData.Add("id", 1);
             string postDataStr = Newtonsoft.Json.JsonConvert.SerializeObject(postData);
             //获取Cli Notify数据
-            resNotify = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8);
+            resNotify = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8,1);
             resJ = new JObject();
             try
             {
@@ -865,7 +865,7 @@ namespace NeoBlockMongoStorage
             postData.Add("id", 1);
             string postDataStr = Newtonsoft.Json.JsonConvert.SerializeObject(postData);
             //获取Cli FullLogs数据
-            string resFulllog = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8);
+            string resFulllog = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8, 1);
             JObject resJ = new JObject();
             try {
                 resJ = JObject.Parse(resFulllog);
@@ -1005,7 +1005,7 @@ namespace NeoBlockMongoStorage
                 postData.Add("id", 1);
                 string postDataStr = Newtonsoft.Json.JsonConvert.SerializeObject(postData);
                 //获取Cli Notify数据
-                string resNotify = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8);
+                string resNotify = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8, 1);
                 JObject resJ = new JObject();
                 try
                 {
@@ -1340,7 +1340,7 @@ namespace NeoBlockMongoStorage
             string postDataStr = Newtonsoft.Json.JsonConvert.SerializeObject(postData);
 
             //获取Cli Notify数据
-            string resp = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8);
+            string resp = chh.Post(NeoCliJsonRPCUrl, postDataStr, Encoding.UTF8, 1);
 
             JObject resJ = new JObject();
             try
