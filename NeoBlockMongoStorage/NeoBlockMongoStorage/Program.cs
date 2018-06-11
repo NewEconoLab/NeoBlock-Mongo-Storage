@@ -148,12 +148,32 @@ namespace NeoBlockMongoStorage
                     Console.WriteLine("StorageBlockTotalSysfee in " + doTime + "ms");
                 }
             });
+            Task task_StorageNep5AddressInfo = new Task(() => {
+
+                Console.WriteLine("异步循环执行StorageNep5Address开始");
+                while (true)
+                {
+                    DateTime start = DateTime.Now;
+
+                    //从Nep5视角统计地址和地址交易（按块处理）
+                    StorageAddressInfoByNEP5transfer();
+
+                    //借用utxo睡眠开关
+                    if (utxoIsSleep) { Thread.Sleep(sleepTime); }
+
+                    DateTime end = DateTime.Now;
+                    var doTime = (end - start).TotalMilliseconds;
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine("StorageNep5AddressInfo in " + doTime + "ms");
+                }
+            });
             //启动任务
             task_StorageUTXO.Start();
             if (isDoNotify) { task_StorageNotify.Start(); }
             task_StorageNEP5.Start();
             if (isDoFullLogs) { task_StorageFulllog.Start(); }
             task_StorageBlockTotalSysfee.Start();
+            task_StorageNep5AddressInfo.Start();
 
             //主进程(同步)
             while (true)
@@ -529,6 +549,42 @@ namespace NeoBlockMongoStorage
             }
 
             client = null;
+        }
+
+        private static void StorageAddressInfoByNEP5transfer()
+        {
+            int NEP5Height = GetSystemCounter("NEP5");
+            int NEP5addrInfoHeight = GetSystemCounter("Nep5AddrInfo");
+
+            //NEP5地址处理高度不超过NEP5信息入库高度
+            if (NEP5addrInfoHeight <= NEP5Height)
+            {
+                var client = new MongoClient(mongodbConnStr);
+                var database = client.GetDatabase(mongodbDatabase);
+
+                var collNEP5trasfer = database.GetCollection<NEP5.Transfer>("NEP5transfer");
+
+                var findStrNEP5trasfer = "{blockindex:{'$gt':" + NEP5addrInfoHeight + "}}";
+                var sortStrNEP5transfer = "{blockindex:1}";
+
+                List<NEP5.Transfer> queryNEP5transfer = collNEP5trasfer.Find(findStrNEP5trasfer).Sort(sortStrNEP5transfer).ToList();
+                int unStorageFirstHeight = queryNEP5transfer.First().blockindex;
+
+                findStrNEP5trasfer = "{blockindex:" + unStorageFirstHeight + "}";
+                sortStrNEP5transfer = "{'blockindex' : 1,'txid' : 1,'n' : 1}";
+
+                queryNEP5transfer = collNEP5trasfer.Find(findStrNEP5trasfer).Sort(sortStrNEP5transfer).ToList();
+
+                foreach (NEP5.Transfer NEP5tf in queryNEP5transfer)
+                {
+                    //判断是否已有地址，无则入库
+
+                    //有则比较，更新或不变
+
+                    //判断是否已有地址交易记录，无则入库
+                }
+
+            }
         }
 
         private static void DoStorageAddressByVoutVin(int blockindex, string VoutVin_addr,string VoutVin_txid,string assetID)
