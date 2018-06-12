@@ -551,6 +551,78 @@ namespace NeoBlockMongoStorage
             client = null;
         }
 
+        private static bool checkAddrTxExist(string addr,string txid) {
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+
+            var collAddrTx = database.GetCollection<NEP5.Transfer>("address_tx");
+
+            var findStr = "{addr:'" + addr + "',txid:'" + txid + "'}";
+
+            var query = collAddrTx.Find(findStr);
+
+            if(query.Count() > 0) { return true; }
+            else { return false; }
+        }
+
+        private static void storageAddrAndAddrtx(string AddrStr,string Txid,int Blockindex) {
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+
+            var collAddr = database.GetCollection<Address>("address");
+            var findBson = BsonDocument.Parse("{addr:'" + AddrStr + "'}");
+            var queryAddr = collAddr.Find(findBson).ToList();
+            Address addr = new Address();
+
+            var Blocktime = GetBlockTime(Blockindex);
+
+            if (queryAddr.Count == 0)//判断是否已有地址，无则入库
+            {
+                //插入结构
+                addr = new Address
+                {
+                    addr = AddrStr,
+                    firstuse = new AddrUse
+                    {
+                        txid = Txid,
+                        blockindex = Blockindex,
+                        blocktime = Blocktime
+                    },
+                    lastuse = new AddrUse
+                    {
+                        txid = Txid,
+                        blockindex = Blockindex,
+                        blocktime = Blocktime
+                    },
+                    txcount = 1
+                };
+                //数据入库
+                collAddr.InsertOne(addr);
+                //AddrTx交易数据入库
+                addAddressTx(addr);
+            }
+            else
+            { //有则比较，更新或不变
+              //更新结构
+                addr = queryAddr[0];
+                if (!checkAddrTxExist(AddrStr, Txid))//判断是否已有地址交易记录，无则更新入库，有则不处理
+                {
+                    addr.lastuse = new AddrUse
+                    {
+                        txid = Txid,
+                        blockindex = Blockindex,
+                        blocktime = Blocktime
+                    };
+                    addr.txcount++;
+
+                    //数据入库
+                    collAddr.InsertOne(addr);
+                    //AddrTx交易数据入库
+                    addAddressTx(addr);
+                }
+            }
+        }
+
         private static void StorageAddressInfoByNEP5transfer()
         {
             int NEP5Height = GetSystemCounter("NEP5");
@@ -577,13 +649,25 @@ namespace NeoBlockMongoStorage
 
                 foreach (NEP5.Transfer NEP5tf in queryNEP5transfer)
                 {
-                    //判断是否已有地址，无则入库
+                    string AddrFrom = NEP5tf.from;
+                    string AddrTo = NEP5tf.to;
+                    string Txid = NEP5tf.txid;
+                    int Blockindex = NEP5tf.blockindex;
 
-                    //有则比较，更新或不变
-
-                    //判断是否已有地址交易记录，无则入库
+                    //NEP5 From
+                    if (NEP5tf.from != string.Empty)
+                    {
+                        storageAddrAndAddrtx(AddrFrom, Txid, Blockindex);                      
+                    }
+                    //NEP5 To
+                    if (NEP5tf.to != string.Empty)
+                    {
+                        storageAddrAndAddrtx(AddrTo, Txid, Blockindex);
+                    }
                 }
 
+                //更新处理高度
+                SetSystemCounter("Nep5AddrInfo", NEP5addrInfoHeight);
             }
         }
 
