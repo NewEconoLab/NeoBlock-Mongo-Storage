@@ -559,10 +559,14 @@ namespace NeoBlockMongoStorage
 
             var findStr = "{addr:'" + addr + "',txid:'" + txid + "'}";
 
-            var query = collAddrTx.Find(findStr);
+            var query = collAddrTx.Find(findStr).ToList();
 
-            if(query.Count() > 0) { return true; }
-            else { return false; }
+            if(query.Count() > 0) {
+                return true;
+            }
+            else {
+                return false;
+            }
         }
 
         private static void storageAddrAndAddrtx(string AddrStr,string Txid,int Blockindex) {
