@@ -658,35 +658,41 @@ namespace NeoBlockMongoStorage
                 var findStrNEP5trasfer = "{blockindex:{'$gt':" + NEP5addrInfoHeight + "}}";
                 var sortStrNEP5transfer = "{blockindex:1}";
 
-                NEP5.Transfer queryNEP5transfer = collNEP5trasfer.Find(findStrNEP5trasfer).Sort(sortStrNEP5transfer).Limit(1).First();
-                int unStorageFirstHeight = queryNEP5transfer.blockindex;
-
-                findStrNEP5trasfer = "{blockindex:" + unStorageFirstHeight + "}";
-                sortStrNEP5transfer = "{'blockindex' : 1,'txid' : 1,'n' : 1}";
-
-                List<NEP5.Transfer> queryNEP5transferS = collNEP5trasfer.Find(findStrNEP5trasfer).Sort(sortStrNEP5transfer).ToList();
-
-                foreach (NEP5.Transfer NEP5tf in queryNEP5transferS)
+                List<NEP5.Transfer>  queryNEP5transfer = collNEP5trasfer.Find(findStrNEP5trasfer).Sort(sortStrNEP5transfer).Limit(1).ToList();
+                if (queryNEP5transfer.Count > 0)
                 {
-                    string AddrFrom = NEP5tf.from;
-                    string AddrTo = NEP5tf.to;
-                    string Txid = NEP5tf.txid;
-                    int Blockindex = NEP5tf.blockindex;
+                    int unStorageFirstHeight = queryNEP5transfer.First().blockindex;
 
-                    //NEP5 From
-                    if (NEP5tf.from != string.Empty)
-                    {
-                        storageAddrAndAddrtx(AddrFrom, Txid, Blockindex);
-                    }
-                    //NEP5 To
-                    if (NEP5tf.to != string.Empty)
-                    {
-                        storageAddrAndAddrtx(AddrTo, Txid, Blockindex);
-                    }
-                }
+                    findStrNEP5trasfer = "{blockindex:" + unStorageFirstHeight + "}";
+                    sortStrNEP5transfer = "{'blockindex' : 1,'txid' : 1,'n' : 1}";
 
-                //更新处理高度
-                SetSystemCounter("Nep5AddrInfo", unStorageFirstHeight);
+                    List<NEP5.Transfer> queryNEP5transferS = collNEP5trasfer.Find(findStrNEP5trasfer).Sort(sortStrNEP5transfer).ToList();
+
+                    if (queryNEP5transferS.Count > 0)
+                    {
+                        foreach (NEP5.Transfer NEP5tf in queryNEP5transferS)
+                        {
+                            string AddrFrom = NEP5tf.from;
+                            string AddrTo = NEP5tf.to;
+                            string Txid = NEP5tf.txid;
+                            int Blockindex = NEP5tf.blockindex;
+
+                            //NEP5 From
+                            if (NEP5tf.from != string.Empty)
+                            {
+                                storageAddrAndAddrtx(AddrFrom, Txid, Blockindex);
+                            }
+                            //NEP5 To
+                            if (NEP5tf.to != string.Empty)
+                            {
+                                storageAddrAndAddrtx(AddrTo, Txid, Blockindex);
+                            }
+                        }
+                    }
+
+                    //更新处理高度
+                    SetSystemCounter("Nep5AddrInfo", unStorageFirstHeight);
+                }             
             }     
         }
 
