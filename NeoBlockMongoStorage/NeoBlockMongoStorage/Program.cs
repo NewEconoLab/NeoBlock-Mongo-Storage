@@ -954,63 +954,67 @@ namespace NeoBlockMongoStorage
                 var jsonWriterSettings = new JsonWriterSettings { OutputMode = JsonOutputMode.Strict };
                 JObject notifyJ = JObject.Parse(query[0].ToJson(jsonWriterSettings));
 
-                //测试nep5
-                if (notifyJ["notifications"] != null)
+                //只有合约执行成功的才处理
+                if ((string)notifyJ["vmstate"] != "FAULT, BREAK")
                 {
-                    JArray notificationsJA = (JArray)notifyJ["notifications"];
-                    if (notificationsJA.Count > 0)
+                    //测试nep5
+                    if (notifyJ["notifications"] != null)
                     {
-                        int n = 0;
-                        foreach (JObject notificationJ in notificationsJA)
+                        JArray notificationsJA = (JArray)notifyJ["notifications"];
+                        if (notificationsJA.Count > 0)
                         {
-                            if (nep5.checkTransfer(notificationJ))
+                            int n = 0;
+                            foreach (JObject notificationJ in notificationsJA)
                             {
-                                //获取nep5资产信息测试
-                                string nep5AssetID = (string)notificationJ["contract"];
-
-                                var collNEP5AssetBson = database.GetCollection<BsonDocument>("NEP5asset");
-                                var findBsonNEP5AssetBson = BsonDocument.Parse("{assetid:'" + nep5AssetID + "'}");
-                                var queryNEP5AssetBson = collNEP5AssetBson.Find(findBsonNEP5AssetBson).ToList();
-
-                                int NEP5decimals = 0;//NEP5资产精度，后面处理资产value有用
-                                if (queryNEP5AssetBson.Count == 0)//不重复才存
+                                if (nep5.checkTransfer(notificationJ))
                                 {
-                                    NEP5.Asset asset = new NEP5.Asset(mongodbDatabase, nep5AssetID);
+                                    //获取nep5资产信息测试
+                                    string nep5AssetID = (string)notificationJ["contract"];
 
-                                    try
+                                    var collNEP5AssetBson = database.GetCollection<BsonDocument>("NEP5asset");
+                                    var findBsonNEP5AssetBson = BsonDocument.Parse("{assetid:'" + nep5AssetID + "'}");
+                                    var queryNEP5AssetBson = collNEP5AssetBson.Find(findBsonNEP5AssetBson).ToList();
+
+                                    int NEP5decimals = 0;//NEP5资产精度，后面处理资产value有用
+                                    if (queryNEP5AssetBson.Count == 0)//不重复才存
                                     {
-                                        var collNEP5Asset = database.GetCollection<NEP5.Asset>("NEP5asset");
-                                        collNEP5Asset.InsertOne(asset);
+                                        NEP5.Asset asset = new NEP5.Asset(mongodbDatabase, nep5AssetID);
 
+                                        try
+                                        {
+                                            var collNEP5Asset = database.GetCollection<NEP5.Asset>("NEP5asset");
+                                            collNEP5Asset.InsertOne(asset);
+
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            var a = ex.Message;
+                                        }
+
+                                        NEP5decimals = asset.decimals;
                                     }
-                                    catch(Exception ex)
+                                    else
                                     {
-                                        var a = ex.Message;
+                                        NEP5decimals = queryNEP5AssetBson[0]["decimals"].ToInt32();
                                     }
 
-                                    NEP5decimals = asset.decimals;
-                                }
-                                else
-                                {
-                                    NEP5decimals = queryNEP5AssetBson[0]["decimals"].ToInt32();
+                                    var collNEP5TransferBson = database.GetCollection<BsonDocument>("NEP5transfer");
+                                    var findBsonNEP5TransferBson = BsonDocument.Parse("{txid:'" + doTxid + "',n:" + n + "}");
+                                    var queryNEP5TransferBson = collNEP5TransferBson.Find(findBsonNEP5TransferBson).ToList();
+
+                                    if (queryNEP5TransferBson.Count == 0)//不重复才存
+                                    {
+                                        NEP5.Transfer tf = new NEP5.Transfer(blockindex, doTxid, n, notificationJ, NEP5decimals);
+
+                                        var collNEP5Transfer = database.GetCollection<NEP5.Transfer>("NEP5transfer");
+                                        collNEP5Transfer.InsertOne(tf);
+                                    }
                                 }
 
-                                var collNEP5TransferBson = database.GetCollection<BsonDocument>("NEP5transfer");
-                                var findBsonNEP5TransferBson = BsonDocument.Parse("{txid:'" + doTxid + "',n:" + n + "}");
-                                var queryNEP5TransferBson = collNEP5TransferBson.Find(findBsonNEP5TransferBson).ToList();
-
-                                if (queryNEP5TransferBson.Count == 0)//不重复才存
-                                {
-                                    NEP5.Transfer tf = new NEP5.Transfer(blockindex, doTxid, n, notificationJ, NEP5decimals);
-
-                                    var collNEP5Transfer = database.GetCollection<NEP5.Transfer>("NEP5transfer");
-                                    collNEP5Transfer.InsertOne(tf);
-                                }
+                                n++;
                             }
 
-                            n++;
                         }
-
                     }
                 }
             }
