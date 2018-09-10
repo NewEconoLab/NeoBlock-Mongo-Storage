@@ -14,6 +14,8 @@ using System.Text;
 using System.IO;
 using MongoDB.Bson.IO;
 using System.Linq;
+using log4net;
+using log4net.Repository;
 
 namespace NeoBlockMongoStorage
 {
@@ -21,6 +23,9 @@ namespace NeoBlockMongoStorage
     {
         static CoreHttpHelper chh = new CoreHttpHelper();
         static NEP5 nep5 = new NEP5();
+
+        static ILoggerRepository repository = LogManager.CreateRepository("NeoBlockMongoStorage");
+        static ILog log = LogManager.GetLogger(repository.Name, typeof(Program));
 
         static string mongodbConnStr = string.Empty;
         static string mongodbDatabase = string.Empty;
@@ -42,6 +47,12 @@ namespace NeoBlockMongoStorage
             mongodbDatabase = config["mongodbDatabase"];
             NeoCliJsonRPCUrl = config["NeoCliJsonRPCUrl"];
             sleepTime = int.Parse(config["sleepTime"]);
+
+            //文本输出启动参数
+            string logStartStr = "入库启动\r\n数据库连接：{0}\r\n数据库名：{1}\r\nCLI连接：{2}\r\n睡眠时间：{3}ms";
+            logStartStr = string.Format(logStartStr, mongodbConnStr, mongodbDatabase, NeoCliJsonRPCUrl, sleepTime);
+            log.Info(logStartStr);
+
             if (int.Parse(config["utxoIsSleep"]) == 1) {
                 utxoIsSleep = true;
             }
