@@ -91,19 +91,26 @@ namespace NeoBlockMongoStorage
             Task task_StorageUTXO = new Task(() => {
                 
                 Console.WriteLine("异步循环执行StorageUTXOData开始");
-                while (true)
+                try
                 {
-                    DateTime start = DateTime.Now;
+                    while (true)
+                    {
+                        DateTime start = DateTime.Now;
 
-                    //统计处理UTXO数据
-                    StorageUTXOData();
+                        //统计处理UTXO数据
+                        StorageUTXOData();
 
-                    if (utxoIsSleep) { Thread.Sleep(sleepTime); }
+                        if (utxoIsSleep) { Thread.Sleep(sleepTime); }
 
-                    DateTime end = DateTime.Now;
-                    var doTime = (end - start).TotalMilliseconds;
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine("StorageUTXOData in " + doTime + "ms");
+                        DateTime end = DateTime.Now;
+                        var doTime = (end - start).TotalMilliseconds;
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine("StorageUTXOData in " + doTime + "ms");
+                    }
+                }
+                catch (Exception e)
+                {
+                    log.Error("task_StorageUTXO\r\nErrorMsg:\r\n" + e.Message);
                 }
             });
             Task task_StorageNotify = new Task(() => {
