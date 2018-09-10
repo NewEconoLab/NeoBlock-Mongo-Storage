@@ -16,6 +16,7 @@ using MongoDB.Bson.IO;
 using System.Linq;
 using log4net;
 using log4net.Repository;
+using log4net.Config;
 
 namespace NeoBlockMongoStorage
 {
@@ -23,9 +24,6 @@ namespace NeoBlockMongoStorage
     {
         static CoreHttpHelper chh = new CoreHttpHelper();
         static NEP5 nep5 = new NEP5();
-
-        static ILoggerRepository repository = LogManager.CreateRepository("NeoBlockMongoStorage");
-        static ILog log = LogManager.GetLogger(repository.Name, typeof(Program));
 
         static string mongodbConnStr = string.Empty;
         static string mongodbDatabase = string.Empty;
@@ -38,6 +36,11 @@ namespace NeoBlockMongoStorage
 
         static void Main(string[] args)
         {
+            //初始化log4net
+            ILoggerRepository repository = LogManager.CreateRepository("NeoBlockMongoStorage");
+            XmlConfigurator.Configure(repository, new FileInfo("log4net.config"));
+            ILog log = LogManager.GetLogger(repository.Name, "NeoBlockMongoStorage_Log");
+
             var config = new ConfigurationBuilder()
                 .AddInMemoryCollection()    //将配置文件的数据加载到内存中
                 .SetBasePath(System.IO.Directory.GetCurrentDirectory())   //指定配置文件所在的目录
