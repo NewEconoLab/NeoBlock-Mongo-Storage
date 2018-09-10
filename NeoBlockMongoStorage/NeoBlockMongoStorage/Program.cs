@@ -255,6 +255,9 @@ namespace NeoBlockMongoStorage
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine("StorageBlockTxData On Block " + doIndex + " in " + doTime + "ms");
                 Console.ForegroundColor = ConsoleColor.White;
+
+                //更新已处理块高度
+                SetSystemCounter("block", doIndex);
             }
         }
 
