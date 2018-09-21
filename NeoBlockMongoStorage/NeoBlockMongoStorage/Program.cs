@@ -978,13 +978,15 @@ namespace NeoBlockMongoStorage
                 var jsonWriterSettings = new JsonWriterSettings { OutputMode = JsonOutputMode.Strict };
                 JObject notifyJ = JObject.Parse(query[0].ToJson(jsonWriterSettings));
 
+                string aaaa = (string)notifyJ["executions"][0]["vmstate"];
+
                 //只有合约执行成功的才处理
-                if ((string)notifyJ["vmstate"] != "FAULT, BREAK")
+                if ((string)notifyJ["executions"][0]["vmstate"] != "FAULT, BREAK")
                 {
                     //测试nep5
-                    if (notifyJ["notifications"] != null)
+                    if (notifyJ["executions"][0]["notifications"] != null)
                     {
-                        JArray notificationsJA = (JArray)notifyJ["notifications"];
+                        JArray notificationsJA = (JArray)notifyJ["executions"][0]["notifications"];
                         if (notificationsJA.Count > 0)
                         {
                             int n = 0;
