@@ -85,7 +85,7 @@ namespace NeoBlockMongoStorage
             Console.WriteLine("cliType " + cliType);
             Console.WriteLine("*************************************");
 
-            Console.WriteLine("Block MaxIndex in DB:" + GetBlockMaxIndex());
+            Console.WriteLine("Block MaxIndex in DB:" + GetSystemCounter("block"));
 
             //创建任务
             Task task_StorageUTXO = new Task(() => {
@@ -230,7 +230,7 @@ namespace NeoBlockMongoStorage
 
         private static void StorageBlockTXData()
         {
-            int maxIndex = GetBlockMaxIndex();
+            int maxIndex = GetSystemCounter("block");
             //检查当前已有区块是否已存所有交易
             if (!IsDataExist("tx", "blockindex", maxIndex))
             {
@@ -356,7 +356,7 @@ namespace NeoBlockMongoStorage
 
             var storageBlockindex = maxBlockindex + 1;
             //处理块不能超过已入库的最大块
-            if (storageBlockindex <= GetBlockMaxIndex())
+            if (storageBlockindex <= GetSystemCounter("block"))
             {
                 DoStorageBlockTotalSysfeeByBlock(storageBlockindex, appName);
             }
@@ -1191,7 +1191,7 @@ namespace NeoBlockMongoStorage
             DateTime start = DateTime.Now;
 
             //处理的notify的块不能大于区块高度
-            if (doBlockIndex <= GetBlockMaxIndex())
+            if (doBlockIndex <= GetSystemCounter("block"))
             {
                 JObject postData = new JObject();
                 postData.Add("jsonrpc", "2.0");
@@ -1584,27 +1584,27 @@ namespace NeoBlockMongoStorage
             client = null;
         }
 
-        private static int GetBlockMaxIndex()
-        {
-            int maxIndex = -1;
-            var client = new MongoClient(mongodbConnStr);
-            var database = client.GetDatabase(mongodbDatabase);
-            var collection = database.GetCollection<BsonDocument>("block");
+        //private static int GetBlockMaxIndex()
+        //{
+        //    int maxIndex = -1;
+        //    var client = new MongoClient(mongodbConnStr);
+        //    var database = client.GetDatabase(mongodbDatabase);
+        //    var collection = database.GetCollection<BsonDocument>("block");
 
-            var sortBson = BsonDocument.Parse("{index:-1}");
-            var query = collection.Find(new BsonDocument()).Sort(sortBson).Limit(1).ToList();
-            if (query.Count == 0)
-            {
-                maxIndex = -1;
-            }
-            else
-            {
-                maxIndex = (int)query[0]["index"];
-            }
+        //    var sortBson = BsonDocument.Parse("{index:-1}");
+        //    var query = collection.Find(new BsonDocument()).Sort(sortBson).Limit(1).ToList();
+        //    if (query.Count == 0)
+        //    {
+        //        maxIndex = -1;
+        //    }
+        //    else
+        //    {
+        //        maxIndex = (int)query[0]["index"];
+        //    }
 
-            client = null;
-            return maxIndex;
-        }
+        //    client = null;
+        //    return maxIndex;
+        //}
 
         //private static bool IsBlockStoraged(int blockIndex)
         //{
