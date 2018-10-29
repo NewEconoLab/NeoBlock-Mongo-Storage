@@ -24,7 +24,7 @@ namespace NeoBlockMongoStorage
     {
         static CoreHttpHelper chh = new CoreHttpHelper();
         static NEP5 nep5 = new NEP5();
-
+        static ILog log;
         static string mongodbConnStr = string.Empty;
         static string mongodbDatabase = string.Empty;
         static string NeoCliJsonRPCUrl = string.Empty;
@@ -39,7 +39,7 @@ namespace NeoBlockMongoStorage
             //初始化log4net
             ILoggerRepository repository = LogManager.CreateRepository("NeoBlockMongoStorage");
             XmlConfigurator.Configure(repository, new FileInfo("log4net.config"));
-            ILog log = LogManager.GetLogger(repository.Name, "NeoBlockMongoStorage_Log");
+            log = LogManager.GetLogger(repository.Name, "NeoBlockMongoStorage_Log");
 
             var config = new ConfigurationBuilder()
                 .AddInMemoryCollection()    //将配置文件的数据加载到内存中
@@ -177,7 +177,8 @@ namespace NeoBlockMongoStorage
                     DateTime start = DateTime.Now;
 
                     //从Nep5视角统计地址和地址交易（按块处理）
-                    StorageAddressInfoByNEP5transfer();
+                    //StorageAddressInfoByNEP5transfer();
+                    StorageAddressInfoByNEP5transferNew();
 
                     //借用utxo睡眠开关
                     if (utxoIsSleep) { Thread.Sleep(sleepTime); }
@@ -227,7 +228,7 @@ namespace NeoBlockMongoStorage
         //{
         //    StorageBaseData();
         //}
-
+        
         private static void StorageBlockTXData()
         {
             int maxIndex = GetSystemCounter("block");
@@ -544,7 +545,7 @@ namespace NeoBlockMongoStorage
             var client = new MongoClient(mongodbConnStr);
             var database = client.GetDatabase(mongodbDatabase);
             var collBlock = database.GetCollection<BsonDocument>("block");
-            var queryBlock = collBlock.Find("{index:" + blockindex + "}").ToList()[0];
+            var queryBlock = collBlock.Find("{index:" + blockindex + "}").Project("{time:1}").ToList()[0];
             int blockTimeTS = queryBlock["time"].AsInt32;
             DateTime blockTime = TimeZoneInfo.ConvertTime(new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc), TimeZoneInfo.Local).AddSeconds(blockTimeTS);
 
@@ -552,29 +553,7 @@ namespace NeoBlockMongoStorage
 
             return blockTime;
         }
-
-        private static void addAddressTx(Address addr)
-        {
-            var client = new MongoClient(mongodbConnStr);
-            var database = client.GetDatabase(mongodbDatabase);
-            var collAddrTx = database.GetCollection<BsonDocument>("address_tx");
-            var findBson = BsonDocument.Parse("{addr:'" + addr.addr + "',txid:'" + addr.lastuse.txid + "'}");
-            var queryAddrTx = collAddrTx.Find(findBson).ToList();
-
-            if (queryAddrTx.Count == 0)
-            {
-                BsonDocument B = new BsonDocument();
-                B.Add("addr", addr.addr);
-                B.Add("txid", addr.lastuse.txid);
-                B.Add("blockindex", addr.lastuse.blockindex);
-                B.Add("blocktime", addr.lastuse.blocktime);
-
-                collAddrTx.InsertOne(B);
-            }
-
-            client = null;
-        }
-
+        
         private static bool checkAddrTxExist(string addr,string txid) {
             var client = new MongoClient(mongodbConnStr);
             var database = client.GetDatabase(mongodbDatabase);
@@ -593,79 +572,155 @@ namespace NeoBlockMongoStorage
             }
         }
 
-        private static void storageAddrAndAddrtx(string AddrStr,string Txid,int Blockindex) {
-            var client = new MongoClient(mongodbConnStr);
-            var database = client.GetDatabase(mongodbDatabase);
-
-            var collAddr = database.GetCollection<Address>("address");
-            var findBson = BsonDocument.Parse("{addr:'" + AddrStr + "'}");
-            var queryAddr = collAddr.Find(findBson).ToList();
-            Address addr = new Address();
-
-            var Blocktime = GetBlockTime(Blockindex);
-
-            if (queryAddr.Count == 0)//判断是否已有地址，无则入库
+        private static void StorageAddressInfoByNEP5transferNew()
+        {
+            try
             {
-                //插入结构
-                addr = new Address
-                {
-                    addr = AddrStr,
-                    firstuse = new AddrUse
-                    {
-                        txid = Txid,
-                        blockindex = Blockindex,
-                        blocktime = Blocktime
-                    },
-                    lastuse = new AddrUse
-                    {
-                        txid = Txid,
-                        blockindex = Blockindex,
-                        blocktime = Blocktime
-                    },
-                    txcount = 1
-                };
-                //数据入库
-                collAddr.InsertOne(addr);
-                //AddrTx交易数据入库
-                addAddressTx(addr);
-            }
-            else
-            { //有则比较，更新或不变
-              //更新结构
-                addr = queryAddr[0];
-                if (!checkAddrTxExist(AddrStr, Txid))//判断是否已有地址交易记录，无则更新入库，有则不处理
-                {
-                    //nep5交易高度，小于addr存储第一次交易高度，修改第一次交易信息
-                    if (addr.firstuse.blockindex > Blockindex)
-                    {
-                        addr.firstuse = new AddrUse
-                        {
-                            txid = Txid,
-                            blockindex = Blockindex,
-                            blocktime = Blocktime
-                        };
-                    }
-                    //nep5交易高度，大于addr存储最后一次交易高度，修改最后一次交易信息
-                    else if (addr.lastuse.blockindex < Blockindex)
-                    {
-                        addr.lastuse = new AddrUse
-                        {
-                            txid = Txid,
-                            blockindex = Blockindex,
-                            blocktime = Blocktime
-                        };
-                    }
+                int NEP5Height = GetSystemCounter("NEP5");
+                int NEP5addrInfoHeight = GetSystemCounter("Nep5AddrInfo");
+                if (NEP5Height <= NEP5addrInfoHeight) return;
 
-                    addr.txcount++;
+                // 处理utxo.addrInfo
+                storageUtxoAddressInfo(NEP5addrInfoHeight, NEP5Height);
+                // 处理nep5transfer.addrInfo
+                storageNep5transferAddressInfo(NEP5addrInfoHeight, NEP5Height);
 
-                    //数据入库
-                    collAddr.ReplaceOne(findBson,addr);
-                    //AddrTx交易数据入库
-                    addAddressTx(addr);
-                }
+                //更新处理高度
+                SetSystemCounter("Nep5AddrInfo", NEP5Height);
+                
+                log.Debug("processed height:"+ NEP5Height);
+
+            } catch (Exception e)
+            {
+                // 异常,可继续运行
+                log.Error(e.Message);
+                log.Error(e.StackTrace);
             }
         }
+        private static void storageUtxoAddressInfo(int addrInfoHeight, int nep5Height)
+        {
+            string connStr = mongodbConnStr;
+            string connDb = mongodbDatabase;
+            var client = connStr == null ? new MongoClient() : new MongoClient(connStr);
+            var database = client.GetDatabase(connDb);
+            var collection = database.GetCollection<BsonDocument>("tx");
 
+            // 查询总量
+            string findStr = new JObject() { { "blockindex", new JObject() { { "$gt", addrInfoHeight }, { "$lte", nep5Height } } } }.ToString();
+            long cnt = collection.Find(BsonDocument.Parse(findStr)).Count();
+            if (cnt == 0) return;
+
+            // 批量处理
+            for(int startIndex=addrInfoHeight; startIndex<nep5Height; ++startIndex)
+            {
+                DateTime now = GetBlockTime(startIndex);
+                Console.WriteLine("start to processUtxoHeight:"+startIndex);
+                findStr = new JObject() { { "blockindex", startIndex } }.ToString();
+                var rr = collection.Find(BsonDocument.Parse(findStr))
+                    .Project(BsonDocument.Parse(new JObject() { { "_id", 0 }, { "blockindex", 1 }, {"txid", 1 }, { "vout.address", 1 }, { "vin", 1 } }.ToString()))
+                    .Sort(BsonDocument.Parse(new JObject() { { "blockindex", 1 } }.ToString()))
+                    .ToList();
+                if (rr == null || rr.Count() == 0) continue;
+
+                foreach (var item in rr)
+                {
+                    JObject tx = JObject.Parse(item.ToString());
+                    string txid = (string)tx["txid"];
+                    JArray vinJA = (JArray)tx["vin"];
+                    JArray voutJA = (JArray)tx["vout"];
+                    // vout
+                    if(voutJA.Count > 0)
+                    {
+                        foreach (var vout in voutJA)
+                        {
+                            string address = vout["address"].ToString();
+                            DoStorageAddressByVoutVin(startIndex, address, txid, null, now);
+                        }
+                    }
+
+                    // vin
+                    if(vinJA.Count > 0)
+                    {
+                        foreach(JObject vinJ in vinJA)
+                        {
+                            string voutTx = (string)vinJ["txid"];
+                            int voutN = (int)vinJ["vout"];
+                            var _collTx = database.GetCollection<BsonDocument>("tx");
+                            var _queryTx = _collTx.Find(BsonDocument.Parse("{txid:'" + voutTx + "'}")).Project(BsonDocument.Parse("{vout:1}")).ToList()[0];
+                            var _voutBA = _queryTx["vout"].AsBsonArray;
+                            string voutAddr = string.Empty;
+                            foreach (BsonValue _bv in _voutBA)
+                            {
+                                if ((int)_bv["n"] == voutN)
+                                {
+                                    voutAddr = _bv["address"].AsString;
+                                    DoStorageAddressByVoutVin(startIndex, voutAddr, txid, null, now);
+                                    break;
+                                }
+                                
+                            }
+                        }
+                    }
+                }
+
+            }
+        }
+        private static void storageNep5transferAddressInfo(int addrInfoHeight, int nep5Height)
+        {
+            string connStr = mongodbConnStr;
+            string connDb = mongodbDatabase;
+            var client = connStr == null ? new MongoClient() : new MongoClient(connStr);
+            var database = client.GetDatabase(connDb);
+            var collection = database.GetCollection<BsonDocument>("NEP5transfer");
+            var document = new BsonDocument { };
+            
+            // 查询总量
+            string findStr = new JObject() { { "blockindex", new JObject() { { "$gt", addrInfoHeight }, { "$lte", nep5Height } } } }.ToString();
+            long cnt = collection.Find(BsonDocument.Parse(findStr)).Count();
+            if (cnt == 0) return;
+            //addrInfoHeight = 440000;
+            // 批量处理
+            for (int startIndex = addrInfoHeight; startIndex < nep5Height; ++startIndex)
+            {
+                DateTime now = GetBlockTime(startIndex);
+                Console.WriteLine("start to processNep5trHeight:" + startIndex);
+                findStr = new JObject() { { "blockindex", startIndex } }.ToString();
+                var rr = collection.Find(BsonDocument.Parse(findStr))
+                    .Project(BsonDocument.Parse(new JObject() { { "_id", 0 }, { "blockindex", 1 }, { "txid", 1 }, { "from", 1 }, { "to", 1 } }.ToString()))
+                    .Sort(BsonDocument.Parse(new JObject() { { "blockindex", 1 } }.ToString()))
+                    .ToList();
+                if (rr == null || rr.Count() == 0) continue;
+
+                foreach (var item in rr)
+                {
+                    JObject tx = JObject.Parse(item.ToString());
+                    string txid = tx["txid"].ToString();
+                    string from = tx["from"].ToString();
+                    string to = tx["to"].ToString();
+                    if(from != null && from != "")
+                    {
+                        DoStorageAddressByVoutVin(startIndex, from, txid, null, now);
+                    }
+                    if (to != null && to != "")
+                    {
+                        DoStorageAddressByVoutVin(startIndex, to, txid, null, now);
+                    }
+
+                }
+            }
+
+        }
+        public static JObject toFilter(string[] fieldValueArr, string fieldName, string logicalOperator = "$or")
+        {
+            if (fieldValueArr.Count() == 1)
+            {
+                return new JObject() { { fieldName, fieldValueArr[0] } };
+            }
+            return new JObject() { { logicalOperator, new JArray() { fieldValueArr.Select(item => new JObject() { { fieldName, item } }).ToArray() } } };
+        }
+
+
+        /*
         private static void StorageAddressInfoByNEP5transfer()
         {
             int NEP5Height = GetSystemCounter("NEP5");
@@ -719,8 +774,9 @@ namespace NeoBlockMongoStorage
                 }             
             }     
         }
+        */
 
-        private static void DoStorageAddressByVoutVin(int blockindex, string VoutVin_addr,string VoutVin_txid,string assetID)
+        private static void DoStorageAddressByVoutVin(int blockindex, string VoutVin_addr,string VoutVin_txid,string assetID, DateTime blockTime)
         {
             var client = new MongoClient(mongodbConnStr);
             var database = client.GetDatabase(mongodbDatabase);
@@ -732,7 +788,7 @@ namespace NeoBlockMongoStorage
             Address addr = new Address();
             if (queryAddr.Count == 0)
             {
-                DateTime blockTime = GetBlockTime(blockindex);
+                //DateTime blockTime = GetBlockTime(blockindex);
 
                 //插入结构
                 addr = new Address
@@ -765,12 +821,12 @@ namespace NeoBlockMongoStorage
             else if(queryAddr.Count>0) {
                 //更新结构
                 addr = queryAddr[0];
-                if (addr.lastuse.txid != VoutVin_txid) {
+                if (addr.lastuse.txid != VoutVin_txid && addr.lastuse.blockindex < blockindex) {
                     addr.lastuse = new AddrUse
                     {
                         txid = VoutVin_txid,
                         blockindex = blockindex,
-                        blocktime = GetBlockTime(blockindex)
+                        blocktime = blockTime
                     };
                     addr.txcount++;
 
@@ -793,12 +849,41 @@ namespace NeoBlockMongoStorage
                     //}
                     
                     collAddr.ReplaceOne(findBson, addr);
-                    addAddressTx(addr);//加入地址交易表记录
                 }
+                addr.lastuse = new AddrUse
+                {
+                    txid = VoutVin_txid,
+                    blockindex = blockindex,
+                    blocktime = blockTime
+                };
+                addAddressTx(addr);//加入地址交易表记录
             }
 
             client = null;
         }
+
+        private static void addAddressTx(Address addr)
+        {
+            var client = new MongoClient(mongodbConnStr);
+            var database = client.GetDatabase(mongodbDatabase);
+            var collAddrTx = database.GetCollection<BsonDocument>("address_tx");
+            var findBson = BsonDocument.Parse("{addr:'" + addr.addr + "',txid:'" + addr.lastuse.txid + "'}");
+            var queryAddrTx = collAddrTx.Find(findBson).ToList();
+
+            if (queryAddrTx.Count == 0)
+            {
+                BsonDocument B = new BsonDocument();
+                B.Add("addr", addr.addr);
+                B.Add("txid", addr.lastuse.txid);
+                B.Add("blockindex", addr.lastuse.blockindex);
+                B.Add("blocktime", addr.lastuse.blocktime);
+
+                collAddrTx.InsertOne(B);
+            }
+
+            client = null;
+        }
+
 
         private static void DoStorageUTXOByTx(int blockindex, JObject TxJ)
         {
@@ -838,7 +923,7 @@ namespace NeoBlockMongoStorage
                         collUTXO.InsertOne(utxo);
                     }
 
-                    DoStorageAddressByVoutVin(blockindex, utxo.addr, txid ,utxo.asset);
+                    //DoStorageAddressByVoutVin(blockindex, utxo.addr, txid ,utxo.asset);
                 }
             }
 
@@ -865,7 +950,7 @@ namespace NeoBlockMongoStorage
                             collUTXO.ReplaceOne(findB, utxo);
                         }
                     }
-
+                    /*
                     try
                     {
                         //查找前序交易vout对应的addr
@@ -884,7 +969,7 @@ namespace NeoBlockMongoStorage
 
                         DoStorageAddressByVoutVin(blockindex, voutAddr, txid, utxo.asset);
                     }
-                    catch { }
+                    catch { }*/
                 }
             }
 
@@ -1006,16 +1091,16 @@ namespace NeoBlockMongoStorage
                                     {
                                         NEP5.Asset asset = new NEP5.Asset(mongodbDatabase, nep5AssetID);
 
-                                        try
-                                        {
+                                        //try
+                                        //{
                                             var collNEP5Asset = database.GetCollection<NEP5.Asset>("NEP5asset");
                                             collNEP5Asset.InsertOne(asset);
-
+                                        /*
                                         }
                                         catch (Exception ex)
                                         {
                                             var a = ex.Message;
-                                        }
+                                        }*/
 
                                         NEP5decimals = asset.decimals;
                                     }
