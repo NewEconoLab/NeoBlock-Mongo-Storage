@@ -165,10 +165,10 @@
   ]
 },
   {
-    "collName": "block_sysfee_unique",
+    "collName": "block_sysfee",
     "indexs": [
       {
-        "indexName": "i_index",
+        "indexName": "i_index_unique",
         "indexDefinition": {
           "index": 1
         },
