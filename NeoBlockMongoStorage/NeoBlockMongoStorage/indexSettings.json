@@ -1,0 +1,297 @@
+[{
+	"collName": "NEP5asset",
+  "indexs": [
+    {
+      "indexName": "i_assetid_unique",
+      "indexDefinition": {
+        "assetid": 1
+      },
+      "isUnique": true
+    }
+  ]
+},
+{
+	"collName": "NEP5transfer",
+  "indexs": [
+    {
+      "indexName": "i_txid_n_unique",
+      "indexDefinition": {
+        "txid": 1,
+        "n": 1
+      },
+      "isUnique": true
+    },
+    {
+      "indexName": "i_blockindex_-1",
+      "indexDefinition": {
+        "blockindex": -1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_asset",
+      "indexDefinition": {
+        "asset": 1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_blcokindex_txid_n",
+      "indexDefinition": {
+        "blockindex": 1,
+        "txid": 1,
+        "n": 1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_from",
+      "indexDefinition": {
+        "from": 1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_to",
+      "indexDefinition": {
+        "to": 1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_txid",
+      "indexDefinition": {
+        "txid": 1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_asset_from",
+      "indexDefinition": {
+        "asset": 1,
+        "from": 1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_asset_to",
+      "indexDefinition": {
+        "asset": 1,
+        "to": 1
+      },
+      "isUnique": false
+    }
+  ]
+},
+{
+	"collName": "address",
+	"indexs": [{
+		"indexName": "i_addr_unique",
+		"indexDefinition": {
+			"addr": 1
+		},
+		"isUnique": true
+	},
+	{
+		"indexName": "i_last_blockindex_txid_-1",
+		"indexDefinition": {
+			"lastuse.blockindex": -1,
+			"lastuse.txid": -1
+		},
+		"isUnique": false
+	},
+	{
+		"indexName": "i_txcount_-1",
+		"indexDefinition": {
+			"txcount": -1
+		},
+		"isUnique": false
+	}]
+},
+{
+	"collName": "address_tx",
+	"indexs": [{
+		"indexName": "i_addr_txid_unique",
+		"indexDefinition": {
+			"addr": 1,
+			"txid": 1
+		},
+		"isUnique": true
+	},
+	{
+		"indexName": "i_addr",
+		"indexDefinition": {
+			"addr": 1
+		},
+		"isUnique": false
+	},
+	{
+		"indexName": "i_blockindex",
+		"indexDefinition": {
+			"blockindex": 1
+		},
+		"isUnique": false
+	},
+	{
+		"indexName": "i_blockindex_-1",
+		"indexDefinition": {
+			"blockindex": -1
+		},
+		"isUnique": false
+	}]
+},
+{
+	"collName": "asset",
+  "indexs": [
+    {
+      "indexName": "i_id_unique",
+      "indexDefinition": {
+        "id": 1
+      },
+      "isUnique": true
+    }
+  ]
+},
+{
+	"collName": "block",
+  "indexs": [
+    {
+      "indexName": "i_index_-1_unique",
+      "indexDefinition": {
+        "index": -1
+      },
+      "isUnique": true
+    }
+  ]
+},
+  {
+    "collName": "block_sysfee_unique",
+    "indexs": [
+      {
+        "indexName": "i_index",
+        "indexDefinition": {
+          "index": 1
+        },
+        "isUnique": true
+      }
+    ]
+  },
+{
+	"collName": "notify",
+  "indexs": [
+    {
+      "indexName": "i_txid_unique",
+      "indexDefinition": {
+        "txid": 1
+      },
+      "isUnique": true
+    },
+    {
+      "indexName": "i_blockindex_-1",
+      "indexDefinition": {
+        "blockindex": -1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_notifications_contract",
+      "indexDefinition": {
+        "notifications.contract": 1
+      },
+      "isUnique": false
+    }
+  ]
+},
+{
+	"collName": "tx",
+  "indexs": [
+    {
+      "indexName": "i_txid_unique",
+      "indexDefinition": {
+        "txid": 1
+      },
+      "isUnique": true
+    },
+    {
+      "indexName": "i_blockindex_-1",
+      "indexDefinition": {
+        "blockindex": -1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_blockindex_txid_-1",
+      "indexDefinition": {
+        "blockindex": -1,
+        "txid": -1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_type",
+      "indexDefinition": {
+        "type": 1
+      },
+      "isUnique": false
+    }
+  ]
+},
+{
+	"collName": "utxo",
+  "indexs": [
+    {
+      "indexName": "i_addr",
+      "indexDefinition": {
+        "addr": 1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_txid_n",
+      "indexDefinition": {
+        "txid": 1,
+        "n": 1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_used",
+      "indexDefinition": {
+        "used": 1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_claimed",
+      "indexDefinition": {
+        "claimed": 1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_createHeight_1",
+      "indexDefinition": {
+        "createHeight": 1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_addr_used",
+      "indexDefinition": {
+        "addr": 1,
+        "used": 1
+      },
+      "isUnique": false
+    },
+    {
+      "indexName": "i_addr_used_claimed_asset",
+      "indexDefinition": {
+        "addr": 1,
+        "used": 1,
+        "claimed": 1,
+        "asset": 1
+      },
+      "isUnique": false
+    }
+  ]
+}]

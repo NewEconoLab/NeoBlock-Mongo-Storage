@@ -87,6 +87,11 @@ namespace NeoBlockMongoStorage
 
             Console.WriteLine("Block MaxIndex in DB:" + GetSystemCounter("block"));
 
+            //每次启动初始化索引initIndex
+            mongoIndexHelper mih = new mongoIndexHelper();
+            mih.initIndex(mongodbConnStr, mongodbDatabase);
+            Console.WriteLine("表索引初始化已完成！");
+
             //创建任务
             Task task_StorageUTXO = new Task(() => {
                 
