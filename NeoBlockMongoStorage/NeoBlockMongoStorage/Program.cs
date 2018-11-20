@@ -583,6 +583,7 @@ namespace NeoBlockMongoStorage
             {
                 int NEP5Height = GetSystemCounter("NEP5");
                 int NEP5addrInfoHeight = GetSystemCounter("Nep5AddrInfo");
+                NEP5addrInfoHeight = (NEP5addrInfoHeight == -1 ? 0 : NEP5addrInfoHeight);
                 if (NEP5Height <= NEP5addrInfoHeight) return;
 
                 // 处理utxo.addrInfo
