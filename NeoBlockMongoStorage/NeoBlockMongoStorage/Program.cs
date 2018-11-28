@@ -615,7 +615,7 @@ namespace NeoBlockMongoStorage
                 int NEP5addrInfoHeight = GetSystemCounter("Nep5AddrInfo");
                 NEP5addrInfoHeight = (NEP5addrInfoHeight == -1 ? 0 : NEP5addrInfoHeight);
                 if (NEP5Height <= NEP5addrInfoHeight) return;
-                for (int st = NEP5addrInfoHeight; st <= NEP5Height; ++st)
+                for (int st = NEP5addrInfoHeight; st <= NEP5Height; st+= batchSize)
                 {
                     int ne = NEP5addrInfoHeight + batchSize;
                     int ed = ne < NEP5Height ? ne : NEP5Height;
