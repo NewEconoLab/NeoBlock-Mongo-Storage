@@ -304,10 +304,31 @@ namespace NeoBlockMongoStorage
                 j.Add("blockindex", blockIndex);
                 listBson.Add(BsonDocument.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(j)));
             }
-            if (listBson.Count > 0 && !IsDataExist("tx", "txid", listBson[0]["txid"].AsString))
+            if (listBson.Count > 0)
             {
-                //批量写入块所有交易数据
-                collection.InsertMany(listBson);
+                //如果只有一个交易，只有矿工交易，没办法只能用它判断重复
+                if (listBson.Count == 1)
+                {
+                    if (!IsDataExist("tx", "txid", listBson[0]["txid"].AsString))
+                    {
+                        //批量写入块所有交易数据
+                        collection.InsertMany(listBson);
+                    }
+                }
+                else//如果有多个交易，就不拿矿工交易判断，用第二个交易判断重复
+                {
+                    //如果矿工交易重复，就不入库
+                    if (IsDataExist("tx", "txid", listBson[0]["txid"].AsString))
+                    {
+                        listBson.RemoveAt(0);
+                    }
+
+                    if (!IsDataExist("tx", "txid", listBson[1]["txid"].AsString))
+                    {
+                        //批量写入块所有交易数据
+                        collection.InsertMany(listBson);
+                    }
+                }
             }
 
             client = null;
