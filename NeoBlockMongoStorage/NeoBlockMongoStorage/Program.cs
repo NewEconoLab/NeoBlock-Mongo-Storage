@@ -617,7 +617,7 @@ namespace NeoBlockMongoStorage
                 if (NEP5Height <= NEP5addrInfoHeight) return;
                 for (int st = NEP5addrInfoHeight; st <= NEP5Height; st+= batchSize)
                 {
-                    int ne = NEP5addrInfoHeight + batchSize;
+                    int ne = st + batchSize;
                     int ed = ne < NEP5Height ? ne : NEP5Height;
                     // 处理utxo.addrInfo
                     storageUtxoAddressInfo(st, ed);
