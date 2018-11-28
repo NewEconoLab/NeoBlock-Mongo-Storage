@@ -320,11 +320,13 @@ namespace NeoBlockMongoStorage
                     //如果矿工交易重复，就抛弃矿工交易
                     listBson.RemoveAt(0);
 
-                    //判断第一个非矿工交易是否重复，如果不重复就入库剩下的交易
-                    if (!IsDataExist("tx", "txid", listBson[0]["txid"].AsString))
-                    {
-                        //批量写入块所有交易数据
-                        collection.InsertMany(listBson);
+                    if (listBson.Count > 0) {
+                        //判断第一个非矿工交易是否重复，如果不重复就入库剩下的交易
+                        if (!IsDataExist("tx", "txid", listBson[0]["txid"].AsString))
+                        {
+                            //批量写入块所有交易数据
+                            collection.InsertMany(listBson);
+                        }
                     }
                 }
                 else//如果矿工交易都不重复，直接入库
