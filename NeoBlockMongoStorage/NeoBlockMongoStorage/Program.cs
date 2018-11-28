@@ -601,13 +601,18 @@ namespace NeoBlockMongoStorage
                 return false;
             }
         }
-
+        
         private static void StorageAddressInfoByNEP5transferNew()
         {
             try
             {
                 int NEP5Height = GetSystemCounter("NEP5");
                 int NEP5addrInfoHeight = GetSystemCounter("Nep5AddrInfo");
+                int blockHeight = GetSystemCounter("block");
+                if(NEP5Height > blockHeight)
+                {
+                    NEP5Height = blockHeight;
+                }
                 NEP5addrInfoHeight = (NEP5addrInfoHeight == -1 ? 0 : NEP5addrInfoHeight);
                 if (NEP5Height <= NEP5addrInfoHeight) return;
                 for (int st = NEP5addrInfoHeight; st <= NEP5Height; st+= batchSize)
