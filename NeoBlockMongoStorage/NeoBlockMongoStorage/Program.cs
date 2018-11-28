@@ -33,6 +33,7 @@ namespace NeoBlockMongoStorage
         static bool isDoNotify = true;
         static bool isDoFullLogs = true;
         static string cliType = "neo"; //neo 原版 ；nel 改版
+        static int batchSize = 100;
 
         static void Main(string[] args)
         {
@@ -50,6 +51,14 @@ namespace NeoBlockMongoStorage
             mongodbDatabase = config["mongodbDatabase"];
             NeoCliJsonRPCUrl = config["NeoCliJsonRPCUrl"];
             sleepTime = int.Parse(config["sleepTime"]);
+            try
+            {
+                batchSize = int.Parse(config["batchSize"]);
+            } catch
+            {
+                batchSize = 100;
+            }
+            
 
             //文本输出启动参数
             string logStartStr = "入库启动\r\n数据库连接：{0}\r\n数据库名：{1}\r\nCLI连接：{2}\r\n睡眠时间：{3}ms";
@@ -606,7 +615,20 @@ namespace NeoBlockMongoStorage
                 int NEP5addrInfoHeight = GetSystemCounter("Nep5AddrInfo");
                 NEP5addrInfoHeight = (NEP5addrInfoHeight == -1 ? 0 : NEP5addrInfoHeight);
                 if (NEP5Height <= NEP5addrInfoHeight) return;
+                for (int st = NEP5addrInfoHeight; st <= NEP5Height; ++st)
+                {
+                    int ne = NEP5addrInfoHeight + batchSize;
+                    int ed = ne < NEP5Height ? ne : NEP5Height;
+                    // 处理utxo.addrInfo
+                    storageUtxoAddressInfo(st, ed);
+                    // 处理nep5transfer.addrInfo
+                    storageNep5transferAddressInfo(st, ed);
 
+                    //更新处理高度
+                    SetSystemCounter("Nep5AddrInfo", ed);
+
+                    log.Debug(string.Format("processed height:{0}/{1}", ed, NEP5Height));
+                }/*
                 // 处理utxo.addrInfo
                 storageUtxoAddressInfo(NEP5addrInfoHeight, NEP5Height);
                 // 处理nep5transfer.addrInfo
@@ -615,9 +637,10 @@ namespace NeoBlockMongoStorage
                 //更新处理高度
                 SetSystemCounter("Nep5AddrInfo", NEP5Height);
                 
-                log.Debug("processed height:"+ NEP5Height);
-
-            } catch (Exception e)
+                 log.Debug("processed height:"+ NEP5Height);
+                 */
+            }
+            catch (Exception e)
             {
                 // 异常,可继续运行
                 log.Error(e.Message);
