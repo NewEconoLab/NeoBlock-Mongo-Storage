@@ -647,6 +647,7 @@ namespace NeoBlockMongoStorage
                 // 异常,可继续运行
                 log.Error(e.Message);
                 log.Error(e.StackTrace);
+                Thread.Sleep(1000*10);
             }
         }
         private static void storageUtxoAddressInfo(int addrInfoHeight, int nep5Height)
