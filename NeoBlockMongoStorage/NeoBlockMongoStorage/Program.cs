@@ -209,7 +209,13 @@ namespace NeoBlockMongoStorage
             task_StorageNEP5.Start();
             if (isDoFullLogs) { task_StorageFulllog.Start(); }
             task_StorageBlockTotalSysfee.Start();
-            task_StorageNep5AddressInfo.Start();
+            //task_StorageNep5AddressInfo.Start();
+            var isAddrTx = config["isAddrTx"] != null && config["isAddrTx"].ToString() == "1";
+            if(isAddrTx)
+            {
+                task_StorageNep5AddressInfo.Start();
+            }
+            
 
             //主进程(同步)
             while (true)
