@@ -216,12 +216,20 @@ namespace NeoBlockMongoStorage
                 task_StorageNep5AddressInfo.Start();
             }
             
-
+            var isBlockTx = config["isBlockTx"] != null && config["isBlockTx"].ToString() == "1";
+            isBlockTx = false;
             //主进程(同步)
             while (true)
             {
                 //处理块数据
-                StorageBlockTXData();
+                //StorageBlockTXData();
+                if(isBlockTx)
+                {
+                    StorageBlockTXData();
+                } else
+                {
+                    StorageTXData();
+                }
                 ////处理交易数据
                 //StorageTxData(); 交易数据在处理块数据时同时处理
 
@@ -345,6 +353,40 @@ namespace NeoBlockMongoStorage
 
             client = null;
         }
+
+
+        private static MongoDBHelper mh = new MongoDBHelper();
+        private static void StorageTXData()
+        {
+            string appName = "tx";
+            int lh = GetSystemCounter(appName);
+            int rh = GetSystemCounter("block");
+            for(int index=lh+1; index<=rh; ++index)
+            {
+                string findStr = new JObject() { {"index", index } }.ToString();
+                var queryRes = mh.GetData(mongodbConnStr, mongodbDatabase, "block", findStr);
+                if (queryRes == null || queryRes.Count == 0) continue;
+
+                //
+                var txs = ((JArray)queryRes[0]["tx"]).Select(p =>
+                {
+                    JObject jo = JObject.Parse(p.ToString());
+                    jo.Add("blockindex", index);
+                    return jo;
+                }).ToArray() ;
+
+                //
+                findStr = new JObject() { { "blockindex", index } }.ToString();
+                if(mh.GetDataCount(mongodbConnStr, mongodbDatabase, "tx", findStr) == 0)
+                {
+                    mh.PutData(mongodbConnStr, mongodbDatabase, "tx", txs);
+                }
+
+                //
+                SetSystemCounter("tx", index);
+            }
+        }
+
 
         private static void DoAssetStorageByVout(string assetID) {
             DateTime start = DateTime.Now;
