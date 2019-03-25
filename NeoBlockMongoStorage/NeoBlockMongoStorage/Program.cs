@@ -388,10 +388,20 @@ namespace NeoBlockMongoStorage
                 }).ToArray() ;
 
                 //
-                findStr = new JObject() { { "blockindex", index } }.ToString();
+                findStr = new JObject() { { "txid", txs[0]["txid"] } }.ToString();
                 if(mh.GetDataCount(mongodbConnStr, mongodbDatabase, "tx", findStr) == 0)
                 {
                     mh.PutData(mongodbConnStr, mongodbDatabase, "tx", txs);
+                } else
+                {
+                    foreach(var tx in txs)
+                    {
+                        findStr = new JObject() { {"txid", tx["txid"] } }.ToString();
+                        if(mh.GetDataCount(mongodbConnStr, mongodbDatabase, "tx", findStr) == 0)
+                        {
+                            mh.PutData(mongodbConnStr, mongodbDatabase, "tx", tx.ToString());
+                        }
+                    }
                 }
 
                 //
