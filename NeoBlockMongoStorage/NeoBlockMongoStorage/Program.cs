@@ -124,7 +124,7 @@ namespace NeoBlockMongoStorage
                 }
                 catch (Exception e)
                 {
-                    log.Error("task_StorageUTXO\r\nErrorMsg:\r\n" + e.Message);
+                    log.Error(string.Format("task_StorageUTXO\r\nErrorMsg:{0}\r\nErrorStk:{1}\r\n", e.Message, e.StackTrace));
                 }
             });
             Task task_StorageNotify = new Task(() => {
@@ -145,14 +145,28 @@ namespace NeoBlockMongoStorage
             });
             Task task_StorageNEP5 = new Task(() => {
                 Console.WriteLine("异步循环执行StorageNEP5Data开始");
-                while (true)
+                try
                 {
-                    //处理NEP5数据
-                    StorageNEP5Data();
+                    while (true)
+                    {
+                        DateTime start = DateTime.Now;
 
-                    //借用utxo睡眠开关
-                    if (utxoIsSleep) { Thread.Sleep(sleepTime); }
+                        //处理NEP5数据
+                        StorageNEP5Data();
+
+                        //借用utxo睡眠开关
+                        if (utxoIsSleep) { Thread.Sleep(sleepTime); }
+
+                        DateTime end = DateTime.Now;
+                        var doTime = (end - start).TotalMilliseconds;
+                        Console.ForegroundColor = ConsoleColor.Yellow;
+                        Console.WriteLine("StorageNEP5Data in " + doTime + "ms");
+                    }
+                } catch (Exception e)
+                {
+                    log.Error(string.Format("task_StorageNEP5\r\nErrorMsg:{0}\r\nErrorStk:{1}\r\n", e.Message, e.StackTrace));
                 }
+                
             });
             Task task_StorageFulllog = new Task(() => {
                 Console.WriteLine("异步循环执行StorageFulllogData开始");
@@ -167,41 +181,55 @@ namespace NeoBlockMongoStorage
             Task task_StorageBlockTotalSysfee = new Task(() => {
 
                 Console.WriteLine("异步循环执行StorageBlockTotalSysfee开始");
-                while (true)
+                try
                 {
-                    DateTime start = DateTime.Now;
+                    while (true)
+                    {
+                        DateTime start = DateTime.Now;
 
-                    //统计处理块总系统费数据
-                    StorageBlockTotalSysfee();
+                        //统计处理块总系统费数据
+                        StorageBlockTotalSysfee();
 
-                    //借用utxo睡眠开关
-                    if (utxoIsSleep) { Thread.Sleep(sleepTime); }
+                        //借用utxo睡眠开关
+                        if (utxoIsSleep) { Thread.Sleep(sleepTime); }
 
-                    DateTime end = DateTime.Now;
-                    var doTime = (end - start).TotalMilliseconds;
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("StorageBlockTotalSysfee in " + doTime + "ms");
+                        DateTime end = DateTime.Now;
+                        var doTime = (end - start).TotalMilliseconds;
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("StorageBlockTotalSysfee in " + doTime + "ms");
+                    }
+                } catch (Exception e)
+                {
+                    log.Error(string.Format("task_StorageBlockTotalSysfee\r\nErrorMsg:{0}\r\nErrorStk:{1}\r\n", e.Message, e.StackTrace));
                 }
+                
             });
             Task task_StorageNep5AddressInfo = new Task(() => {
 
                 Console.WriteLine("异步循环执行StorageNep5Address开始");
-                while (true)
+                try
                 {
-                    DateTime start = DateTime.Now;
+                    while (true)
+                    {
+                        DateTime start = DateTime.Now;
 
-                    //从Nep5视角统计地址和地址交易（按块处理）
-                    //StorageAddressInfoByNEP5transfer();
-                    StorageAddressInfoByNEP5transferNew();
+                        //从Nep5视角统计地址和地址交易（按块处理）
+                        //StorageAddressInfoByNEP5transfer();
+                        StorageAddressInfoByNEP5transferNew();
 
-                    //借用utxo睡眠开关
-                    if (utxoIsSleep) { Thread.Sleep(sleepTime); }
+                        //借用utxo睡眠开关
+                        if (utxoIsSleep) { Thread.Sleep(sleepTime); }
 
-                    DateTime end = DateTime.Now;
-                    var doTime = (end - start).TotalMilliseconds;
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("StorageNep5AddressInfo in " + doTime + "ms");
+                        DateTime end = DateTime.Now;
+                        var doTime = (end - start).TotalMilliseconds;
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("StorageNep5AddressInfo in " + doTime + "ms");
+                    }
+                } catch (Exception e)
+                {
+                    log.Error(string.Format("task_StorageNep5AddressInfo\r\nErrorMsg:{0}\r\nErrorStk:{1}\r\n", e.Message, e.StackTrace));
                 }
+                
             });
             //启动任务
             task_StorageUTXO.Start();
@@ -211,24 +239,20 @@ namespace NeoBlockMongoStorage
             task_StorageBlockTotalSysfee.Start();
             //task_StorageNep5AddressInfo.Start();
             var isAddrTx = config["isAddrTx"] != null && config["isAddrTx"].ToString() == "1";
-            if(isAddrTx)
-            {
-                task_StorageNep5AddressInfo.Start();
-            }
+            if(isAddrTx) { task_StorageNep5AddressInfo.Start(); }
             
-            var isBlockTx = config["isBlockTx"] != null && config["isBlockTx"].ToString() == "1";
-            isBlockTx = false;
+            var isTx = config["isTx"] != null && config["isTx"].ToString() == "1";
             //主进程(同步)
             while (true)
             {
                 //处理块数据
                 //StorageBlockTXData();
-                if(isBlockTx)
+                if(isTx)
                 {
-                    StorageBlockTXData();
+                    StorageTXData(); 
                 } else
                 {
-                    StorageTXData();
+                    StorageBlockTXData();
                 }
                 ////处理交易数据
                 //StorageTxData(); 交易数据在处理块数据时同时处理
@@ -242,20 +266,8 @@ namespace NeoBlockMongoStorage
 
                 Thread.Sleep(sleepTime);
             }
-
-
-
-            //Timer t = new Timer(100);
-            //t.Enabled = true;
-            //t.Elapsed += T_Elapsed;          
-
-            //Console.ReadKey();
         }
 
-        //private static void T_Elapsed(object sender, ElapsedEventArgs e)
-        //{
-        //    StorageBaseData();
-        //}
         
         private static void StorageBlockTXData()
         {
