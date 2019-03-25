@@ -683,6 +683,12 @@ namespace NeoBlockMongoStorage
             {
                 NEP5Height = blockHeight;
             }
+            int txHeight = GetSystemCounter("tx");
+            if(NEP5Height > txHeight)
+            {
+                NEP5Height = txHeight;
+            }
+
             if (NEP5Height <= NEP5addrInfoHeight) return;
 
             for(int startIndex= NEP5addrInfoHeight/*已处理高度*/ + 1; startIndex <= NEP5Height; ++startIndex)
