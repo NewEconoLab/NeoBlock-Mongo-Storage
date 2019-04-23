@@ -14,7 +14,7 @@ namespace NeoBlockMongoStorage
         public static string getNEP5ContractInfo(string netType,string scripthash, string key)
         {
             string apiUrl = string.Empty;
-            if (netType == "NeoBlockData_mainnet")
+            if (netType == "mainnet")
             {
                 apiUrl = "https://api.nel.group/api/mainnet";
             }

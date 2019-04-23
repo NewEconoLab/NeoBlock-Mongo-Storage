@@ -25,6 +25,7 @@ namespace NeoBlockMongoStorage
         static CoreHttpHelper chh = new CoreHttpHelper();
         static NEP5 nep5 = new NEP5();
         static ILog log;
+        static string network = string.Empty;
         static string mongodbConnStr = string.Empty;
         static string mongodbDatabase = string.Empty;
         static string NeoCliJsonRPCUrl = string.Empty;
@@ -47,6 +48,7 @@ namespace NeoBlockMongoStorage
                 .SetBasePath(System.IO.Directory.GetCurrentDirectory())   //指定配置文件所在的目录
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)  //指定加载的配置文件
                 .Build();    //编译成对象  
+            network = config["network"];
             mongodbConnStr = config["mongodbConnStr"];
             mongodbDatabase = config["mongodbDatabase"];
             NeoCliJsonRPCUrl = config["NeoCliJsonRPCUrl"];
@@ -87,6 +89,7 @@ namespace NeoBlockMongoStorage
             }
             Console.WriteLine("NeoBlockMongoStorage Start!");
             Console.WriteLine("*************************************");
+            Console.WriteLine("network " + network);
             Console.WriteLine("mongodbConnStr" + mongodbConnStr);
             Console.WriteLine("mongodbDatabase" + mongodbDatabase);
             Console.WriteLine("NeoCliJsonRPCUrl" + NeoCliJsonRPCUrl);
@@ -168,6 +171,7 @@ namespace NeoBlockMongoStorage
                 }
                 
             });
+            
             Task task_StorageFulllog = new Task(() => {
                 Console.WriteLine("异步循环执行StorageFulllogData开始");
                 while (true)
@@ -231,6 +235,7 @@ namespace NeoBlockMongoStorage
                 }
                 
             });
+            
             //启动任务
             task_StorageUTXO.Start();
             if (isDoNotify) { task_StorageNotify.Start(); }
@@ -1161,7 +1166,7 @@ namespace NeoBlockMongoStorage
                                     int NEP5decimals = 0;//NEP5资产精度，后面处理资产value有用
                                     if (queryNEP5AssetBson.Count == 0)//不重复才存
                                     {
-                                        NEP5.Asset asset = new NEP5.Asset(mongodbDatabase, nep5AssetID);
+                                        NEP5.Asset asset = new NEP5.Asset(network, nep5AssetID);
 
                                         //try
                                         //{
