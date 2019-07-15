@@ -1143,7 +1143,8 @@ namespace NeoBlockMongoStorage
                 string aaaa = (string)notifyJ["executions"][0]["vmstate"];
 
                 //只有合约执行成功的才处理
-                if ((string)notifyJ["executions"][0]["vmstate"] != "FAULT, BREAK")
+                if ((string)notifyJ["executions"][0]["vmstate"] != "FAULT, BREAK"
+                    && (string)notifyJ["executions"][0]["vmstate"] != "FAULT")
                 {
                     //测试nep5
                     if (notifyJ["executions"][0]["notifications"] != null)
