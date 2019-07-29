@@ -50,6 +50,9 @@ cd  NeoBlock-Mongo-Storage/NeoBlockMongoStorage/NeoBlockMongoStorage/bin/Debug/n
 dotnet NeoBlock-Mongo-Storage.dll
 ```
 
+### 依赖工程
+- [改动后的neo节点](https://github.com/NewEconoLab/neo-cli-nel)
+
 
 <a name="en">English</a>
 ## Overview :
@@ -97,3 +100,6 @@ dotnet publish
 cd  NeoBlock-Mongo-Storage/NeoBlockMongoStorage/NeoBlockMongoStorage/bin/Debug/netcoreapp2.0
 dotnet NeoBlock-Mongo-Storage.dll
 ```
+
+### dependency project
+- [modified neo node](https://github.com/NewEconoLab/neo-cli-nel)
