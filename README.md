@@ -1,4 +1,4 @@
-# NEL_Scan_API
+# NeoBlock-Mongo-Storage
 [简体中文](#zh) |    [English](#en) 
 
 <a name="zh">简体中文</a>
@@ -47,7 +47,7 @@ git clone https://github.com/NewEconoLab/NeoBlock-Mongo-Storage.git
 ```
 dotnet publish
 cd  NeoBlock-Mongo-Storage/NeoBlockMongoStorage/NeoBlockMongoStorage/bin/Debug/netcoreapp2.0
-dotnet NEL_Scan_API.dll
+dotnet NeoBlock-Mongo-Storage.dll
 ```
 
 
@@ -95,5 +95,5 @@ Compile and run :
 ```
 dotnet publish
 cd  NeoBlock-Mongo-Storage/NeoBlockMongoStorage/NeoBlockMongoStorage/bin/Debug/netcoreapp2.0
-dotnet NEL_Scan_API.dll
+dotnet NeoBlock-Mongo-Storage.dll
 ```
