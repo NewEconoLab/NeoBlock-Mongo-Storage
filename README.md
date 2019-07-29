@@ -31,14 +31,14 @@ git clone https://github.com/NewEconoLab/NeoBlock-Mongo-Storage.git
 修改配置文件放在执行文件下，配置文件大致如下 :
 ```json
 {
-  "mongodbConnStr": "",
-  "mongodbDatabase": "",
-  "NeoCliJsonRPCUrl": "",
-  "sleepTime": ,
-  "utxoIsSleep": ,
-  "isDoNotify": ,
-  "isDoFullLogs": ,
-  "cliType": ""
+  "mongodbConnStr": "基础数据库连接地址",
+  "mongodbDatabase": "基础数据库名称",
+  "NeoCliJsonRPCUrl": "neo-cli-nel节点请求地址",
+  "sleepTime": "睡眠时间",
+  "utxoIsSleep": "是否需要睡眠",
+  "isDoNotify": "是否启动notify入库",
+  "isDoFullLogs": "是否启动fulllog入库",
+  "cliType": "网络类型"
 }
 ```
 
@@ -51,7 +51,7 @@ dotnet NeoBlock-Mongo-Storage.dll
 ```
 
 ### 依赖工程
-- [改动后的neo节点](https://github.com/NewEconoLab/neo-cli-nel)
+- [neo-cli-nel](https://github.com/NewEconoLab/neo-cli-nel)
 
 
 <a name="en">English</a>
@@ -83,14 +83,14 @@ git clone https://github.com/NewEconoLab/NeoBlock-Mongo-Storage.git
 Modify the configuration file under the execution file, the configuration file is roughly as follows:
 ```json
 {
-  "mongodbConnStr": "",
-  "mongodbDatabase": "",
-  "NeoCliJsonRPCUrl": "",
-  "sleepTime": ,
-  "utxoIsSleep": ,
-  "isDoNotify": ,
-  "isDoFullLogs": ,
-  "cliType": ""
+  "mongodbConnStr": "basic database connectString",
+  "mongodbDatabase": "basic database name",
+  "NeoCliJsonRPCUrl": "neo-cli-nel request URL",
+  "sleepTime": "sleep time",
+  "utxoIsSleep": "if utxo need sleep",
+  "isDoNotify": "if notify function start",
+  "isDoFullLogs": "if fulllog function start",
+  "cliType": "network"
 }
 ```
 
@@ -102,4 +102,4 @@ dotnet NeoBlock-Mongo-Storage.dll
 ```
 
 ### dependency project
-- [modified neo node](https://github.com/NewEconoLab/neo-cli-nel)
+- [neo-cli-nel](https://github.com/NewEconoLab/neo-cli-nel)
